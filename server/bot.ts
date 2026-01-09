@@ -4,6 +4,39 @@ import { format } from "date-fns";
 
 let bot: TelegramBot | null = null;
 
+export async function getBotUpdates() {
+  if (!bot) return [];
+  try {
+    const updates = await bot.getUpdates({ offset: -1, limit: 10 });
+    for (const update of updates) {
+      if (update.message) {
+        await handleMessage(update.message);
+      }
+    }
+    return updates;
+  } catch (error) {
+    console.error("Error fetching updates:", error);
+    return [];
+  }
+}
+
+async function handleMessage(msg: TelegramBot.Message) {
+  if (!msg.chat || !msg.chat.id) return;
+
+  const chatId = msg.chat.id.toString();
+  const existingGroup = await storage.getGroupById(chatId);
+  
+  if (!existingGroup) {
+    await storage.addGroup({
+      chatId: chatId,
+      title: msg.chat.title || msg.chat.username || `Private: ${msg.from?.first_name || 'User'}`,
+      isActive: true
+    });
+  } else if (msg.chat.title && existingGroup.title !== msg.chat.title) {
+    await storage.updateGroup(chatId, { title: msg.chat.title });
+  }
+}
+
 export async function setupBot() {
   const settings = await storage.getBotSettings();
   const token = settings?.botToken || process.env.BOT_TOKEN;
@@ -18,33 +51,7 @@ export async function setupBot() {
   console.log("Starting Telegram bot...");
   bot = new TelegramBot(token, { polling: true });
 
-  bot.on("message", async (msg) => {
-    console.log("Bot received message:", {
-      chatId: msg.chat.id,
-      chatType: msg.chat.type,
-      text: msg.text,
-      from: msg.from?.username
-    });
-
-    if (!msg.chat || !msg.chat.id) return;
-
-    // Track groups and private chats automatically
-    const chatId = msg.chat.id.toString();
-    const existingGroup = await storage.getGroupById(chatId);
-    
-    if (!existingGroup) {
-      console.log("Registering new group:", chatId);
-      await storage.addGroup({
-        chatId: chatId,
-        title: msg.chat.title || msg.chat.username || `Private: ${msg.from?.first_name || 'User'}`,
-        isActive: true
-      });
-    } else if (msg.chat.title && existingGroup.title !== msg.chat.title) {
-      // Update title if it changed (for groups)
-      console.log("Updating group title:", chatId);
-      await storage.updateGroup(chatId, { title: msg.chat.title });
-    }
-  });
+  bot.on("message", handleMessage);
 
   bot.onText(/\/(.+)/, async (msg, match) => {
     const chatId = msg.chat.id.toString();

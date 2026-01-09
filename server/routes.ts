@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import * as xlsx from "xlsx";
-import { setupBot, processUpdate } from "./bot";
+import { setupBot, processUpdate, getBotUpdates } from "./bot";
 import session from "express-session";
 import MemoryStoreFactory from "memorystore";
 import cron from "node-cron";
@@ -79,6 +79,12 @@ export async function registerRoutes(
   app.patch("/api/settings/groups/:chatId", requireAuth, async (req, res) => {
     const group = await storage.updateGroup(req.params.chatId, req.body);
     res.json(group);
+  });
+
+  app.post("/api/settings/groups/sync", requireAuth, async (req, res) => {
+    await getBotUpdates();
+    const groups = await storage.getGroups();
+    res.json(groups);
   });
 
   app.post(api.users.login.path, (req, res) => {

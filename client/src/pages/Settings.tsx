@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Trash2, Plus, Bell, Bot, Users, Mail, MessageSquare, Save } from "lucide-react";
+import { Trash2, Plus, Bell, Bot, Users, Mail, MessageSquare, Save, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Layout } from "@/components/Layout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -117,6 +117,23 @@ export default function Settings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/settings/groups"] });
       toast({ title: "Success", description: "Group updated" });
+    },
+  });
+
+  const syncGroupsMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/settings/groups/sync", {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error("Failed to sync groups");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/groups"] });
+      toast({ title: "Success", description: "Synced recent Telegram activity" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
 
@@ -322,9 +339,20 @@ export default function Settings() {
 
           <TabsContent value="groups">
             <Card>
-              <CardHeader>
-                <CardTitle>Tracked Groups</CardTitle>
-                <CardDescription>Manage Telegram groups where the bot is active.</CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <div className="space-y-1">
+                  <CardTitle>Tracked Groups</CardTitle>
+                  <CardDescription>Manage Telegram groups where the bot is active.</CardDescription>
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => syncGroupsMutation.mutate()}
+                  disabled={syncGroupsMutation.isPending}
+                >
+                  <RefreshCw className={`w-4 h-4 mr-2 ${syncGroupsMutation.isPending ? "animate-spin" : ""}`} />
+                  Detect New Groups
+                </Button>
               </CardHeader>
               <CardContent>
                 {loadingGroups ? (
