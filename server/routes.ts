@@ -12,65 +12,6 @@ import { format } from "date-fns";
 
 const MemoryStore = MemoryStoreFactory(session);
 
-export async function registerRoutes(
-  httpServer: Server,
-  app: Express
-): Promise<Server> {
-  // === Session Config ===
-  app.use(session({
-    cookie: { maxAge: 86400000 },
-    store: new MemoryStore({
-      checkPeriod: 86400000 // prune expired entries every 24h
-    }),
-    resave: false,
-    saveUninitialized: false,
-    secret: process.env.SESSION_SECRET || 'dev-secret'
-  }));
-
-
-  // Bot Settings
-  app.get("/api/settings/bot", requireAuth, async (req, res) => {
-    const settings = await storage.getBotSettings();
-    res.json(settings || {});
-  });
-
-  app.post("/api/settings/bot", requireAuth, async (req, res) => {
-    const settings = await storage.updateBotSettings(req.body);
-    res.json(settings);
-  });
-
-  // Telegram Groups
-  app.get("/api/settings/groups", requireAuth, async (req, res) => {
-    const groups = await storage.getGroups();
-    res.json(groups);
-  });
-
-  app.post("/api/settings/groups", requireAuth, async (req, res) => {
-    const group = await storage.addGroup(req.body);
-    res.json(group);
-  });
-
-  app.patch("/api/settings/groups/:chatId", requireAuth, async (req, res) => {
-    const group = await storage.updateGroup(req.params.chatId, req.body);
-    res.json(group);
-  });
-
-  app.post(api.users.login.path, (req, res) => {
-    const { username, password } = req.body;
-    const authorizedUsers = getAuthorizedUsers();
-    
-  });
-
-  app.post(api.users.logout.path, (req, res) => {
-    req.session.destroy(() => {
-      res.json({ success: true });
-    });
-  });
-
-
-    const users = await storage.getAllUsers();
-    res.json(users);
-  });
 
   app.get(api.users.get.path, requireAuth, async (req, res) => {
     const user = await storage.getUser(Number(req.params.id));
