@@ -1,114 +1,105 @@
-import TelegramBot from 'node-telegram-bot-api';
-import { storage } from './storage';
-import { format } from 'date-fns';
-
-// This token should be in environment variables
-const token = process.env.BOT_TOKEN;
-// Replit URL for webhook
-const url = process.env.REPLIT_SLUG ? `https://${process.env.REPLIT_SLUG}.replit.app` : 'http://localhost:5000';
+import TelegramBot from "node-telegram-bot-api";
+import { storage } from "./storage";
+import { format } from "date-fns";
 
 let bot: TelegramBot | null = null;
 
 export function setupBot() {
+  const token = process.env.BOT_TOKEN;
   if (!token) {
-    console.warn("BOT_TOKEN is not set. Telegram bot will not start.");
+    console.log("BOT_TOKEN is not set. Telegram bot will not start.");
     return null;
   }
 
-  // Use 'webhook' option if you strictly want webhooks, but for Replit dev, 
-  // sometimes polling is easier to debug if the URL isn't public yet.
-  // However, the requirement is "NO polling", so we configure for webhook.
-  // We will assume the webhook is set manually or via an endpoint.
-  bot = new TelegramBot(token, { polling: false }); 
+  if (bot) return bot;
 
-  // Commands
-  bot.onText(/\/start/, async (msg) => {
-    const chatId = msg.chat.id;
-    const userId = msg.from?.id.toString();
-    const username = msg.from?.username;
-    const fullName = [msg.from?.first_name, msg.from?.last_name].filter(Boolean).join(' ');
+  bot = new TelegramBot(token, { polling: true });
 
-    if (!userId) return;
+  bot.on("message", async (msg) => {
+    if (!msg.chat || !msg.chat.id) return;
 
-    let user = await storage.getUserByTelegramId(userId);
-    if (!user) {
-      user = await storage.createUser({
-        telegramId: userId,
-        username: username || `user_${userId}`,
-        fullName: fullName || 'Unknown',
-        email: '',
-        timezone: 'UTC',
-        isActive: true
-      });
-      bot?.sendMessage(chatId, `Welcome ${fullName}! You are now registered.`);
-    } else {
-      bot?.sendMessage(chatId, `Welcome back ${fullName}!`);
+    // Track groups automatically
+    if (msg.chat.type === "group" || msg.chat.type === "supergroup") {
+      const existingGroups = await storage.getGroups();
+      const isTracked = existingGroups.some(g => g.chatId === msg.chat.id.toString());
+      if (!isTracked) {
+        await storage.addGroup({
+          chatId: msg.chat.id.toString(),
+          title: msg.chat.title || "Untitled Group",
+          isActive: true
+        });
+      }
     }
   });
 
   bot.onText(/\/(.+)/, async (msg, match) => {
+    const chatId = msg.chat.id.toString();
     const command = match?.[1];
-    if (['start', 'setemail'].includes(command || '')) return;
+    if (!command) return;
 
-    const categories = await storage.getBreakCategories();
-    const startCat = categories.find(c => c.startCommand === command);
-    const endCat = categories.find(c => c.endCommand === command);
+    // Check if group is active
+    const groups = await storage.getGroups();
+    const group = groups.find(g => g.chatId === chatId);
+    if (group && !group.isActive) return;
 
-    if (startCat) {
-      await handleBreak(msg, startCat.name, 'start', startCat.id);
-    } else if (endCat) {
-      await handleBreak(msg, endCat.name, 'end', endCat.id);
+    const telegramId = msg.from?.id.toString();
+    if (!telegramId) return;
+
+    const category = await storage.getBreakCategoryByCommand(command);
+    if (!category) return;
+
+    const user = await storage.getUserByTelegramId(telegramId);
+    if (!user) {
+      // Auto-register user if not exists
+      await storage.createUser({
+        telegramId,
+        username: msg.from?.username,
+        fullName: `${msg.from?.first_name || ""} ${msg.from?.last_name || ""}`.trim(),
+        isActive: true
+      });
+    }
+
+    const dbUser = await storage.getUserByTelegramId(telegramId);
+    if (!dbUser) return;
+
+    if (command === category.startCommand) {
+      const activeBreak = await storage.getActiveBreak(dbUser.id);
+      if (activeBreak) {
+        bot?.sendMessage(chatId, `@${msg.from?.username || msg.from?.first_name}, you are already on a break!`);
+        return;
+      }
+
+      await storage.createBreak({
+        userId: dbUser.id,
+        categoryId: category.id,
+        type: category.name,
+        startTime: new Date(),
+        date: format(new Date(), "yyyy-MM-dd")
+      });
+
+      bot?.sendMessage(chatId, `@${msg.from?.username || msg.from?.first_name}, started your ${category.name}. Limit: ${category.duration}m.`);
+    } else if (command === category.endCommand) {
+      const activeBreak = await storage.getActiveBreak(dbUser.id);
+      if (!activeBreak || activeBreak.categoryId !== category.id) {
+        bot?.sendMessage(chatId, `@${msg.from?.username || msg.from?.first_name}, you haven't started this break type!`);
+        return;
+      }
+
+      const endTime = new Date();
+      const duration = Math.round((endTime.getTime() - activeBreak.startTime.getTime()) / 60000);
+      await storage.endBreak(activeBreak.id, endTime, duration);
+
+      let message = `@${msg.from?.username || msg.from?.first_name}, ended your ${category.name}. Duration: ${duration}m.`;
+      if (duration > category.duration) {
+        message += `\n⚠️ Warning: You exceeded the ${category.duration}m limit by ${duration - category.duration}m!`;
+      }
+      bot?.sendMessage(chatId, message);
     }
   });
 
-  console.log('Telegram bot setup complete (Webhook mode).');
   return bot;
 }
 
-async function handleBreak(msg: TelegramBot.Message, type: string, action: 'start' | 'end', categoryId?: number) {
-  const chatId = msg.chat.id;
-  const telegramId = msg.from?.id.toString();
-  if (!telegramId) return;
-
-  const user = await storage.getUserByTelegramId(telegramId);
-  if (!user) {
-    bot?.sendMessage(chatId, "Please /start to register first.");
-    return;
-  }
-
-  if (action === 'start') {
-    // Check if already on break
-    const activeBreak = await storage.getActiveBreak(user.id);
-    if (activeBreak) {
-      bot?.sendMessage(chatId, `You are already on a ${activeBreak.type} since ${format(new Date(activeBreak.startTime), 'HH:mm')}. End it first.`);
-      return;
-    }
-
-    await storage.createBreak({
-      userId: user.id,
-      categoryId: categoryId,
-      type,
-      startTime: new Date(),
-      date: new Date().toISOString().split('T')[0]
-    });
-    bot?.sendMessage(chatId, `Started ${type} at ${format(new Date(), 'HH:mm')}.`);
-  } else {
-    // End break
-    const activeBreak = await storage.getActiveBreak(user.id);
-    if (!activeBreak) {
-      bot?.sendMessage(chatId, "You don't have an active break.");
-      return;
-    }
-    
-    const endTime = new Date();
-    const duration = Math.round((endTime.getTime() - new Date(activeBreak.startTime).getTime()) / 60000);
-    
-    await storage.endBreak(activeBreak.id, endTime, duration);
-    bot?.sendMessage(chatId, `Ended ${activeBreak.type} at ${format(endTime, 'HH:mm')}. Duration: ${duration} mins.`);
-  }
-}
-
-// Function to process webhook updates
 export function processUpdate(update: any) {
   if (bot) {
     bot.processUpdate(update);

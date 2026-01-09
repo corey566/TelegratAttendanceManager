@@ -1,3 +1,4 @@
+import { db } from "./db";
 import { users, breaks, breakCategories, botSettings, telegramGroups, type User, type InsertUser, type Break, type InsertBreak, type BreakCategory, type InsertBreakCategory, type BotSettings, type InsertBotSettings, type TelegramGroup, type InsertTelegramGroup } from "@shared/schema";
 import { eq, and, isNull, desc, gte, lte } from "drizzle-orm";
 
@@ -30,40 +31,6 @@ export interface IStorage {
   getGroups(): Promise<TelegramGroup[]>;
   addGroup(group: InsertTelegramGroup): Promise<TelegramGroup>;
   updateGroup(chatId: string, updates: Partial<TelegramGroup>): Promise<TelegramGroup>;
-}
-
-export class DatabaseStorage implements IStorage {
-  // ... existing methods ...
-
-  async getBotSettings(): Promise<BotSettings | undefined> {
-    const [settings] = await db.select().from(botSettings);
-    return settings;
-  }
-
-  async updateBotSettings(updates: Partial<BotSettings>): Promise<BotSettings> {
-    const existing = await this.getBotSettings();
-    if (existing) {
-      const [updated] = await db.update(botSettings).set(updates).where(eq(botSettings.id, existing.id)).returning();
-      return updated;
-    } else {
-      const [inserted] = await db.insert(botSettings).values(updates as any).returning();
-      return inserted;
-    }
-  }
-
-  async getGroups(): Promise<TelegramGroup[]> {
-    return await db.select().from(telegramGroups);
-  }
-
-  async addGroup(group: InsertTelegramGroup): Promise<TelegramGroup> {
-    const [newGroup] = await db.insert(telegramGroups).values(group).returning();
-    return newGroup;
-  }
-
-  async updateGroup(chatId: string, updates: Partial<TelegramGroup>): Promise<TelegramGroup> {
-    const [updated] = await db.update(telegramGroups).set(updates).where(eq(telegramGroups.chatId, chatId)).returning();
-    return updated;
-  }
 }
 
 export class DatabaseStorage implements IStorage {
@@ -151,6 +118,36 @@ export class DatabaseStorage implements IStorage {
 
   async deleteBreakCategory(id: number): Promise<void> {
     await db.delete(breakCategories).where(eq(breakCategories.id, id));
+  }
+
+  async getBotSettings(): Promise<BotSettings | undefined> {
+    const [settings] = await db.select().from(botSettings);
+    return settings;
+  }
+
+  async updateBotSettings(updates: Partial<BotSettings>): Promise<BotSettings> {
+    const existing = await this.getBotSettings();
+    if (existing) {
+      const [updated] = await db.update(botSettings).set(updates).where(eq(botSettings.id, existing.id)).returning();
+      return updated;
+    } else {
+      const [inserted] = await db.insert(botSettings).values(updates as any).returning();
+      return inserted;
+    }
+  }
+
+  async getGroups(): Promise<TelegramGroup[]> {
+    return await db.select().from(telegramGroups);
+  }
+
+  async addGroup(group: InsertTelegramGroup): Promise<TelegramGroup> {
+    const [newGroup] = await db.insert(telegramGroups).values(group).returning();
+    return newGroup;
+  }
+
+  async updateGroup(chatId: string, updates: Partial<TelegramGroup>): Promise<TelegramGroup> {
+    const [updated] = await db.update(telegramGroups).set(updates).where(eq(telegramGroups.chatId, chatId)).returning();
+    return updated;
   }
 }
 
