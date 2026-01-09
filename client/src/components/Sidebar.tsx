@@ -1,15 +1,34 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Users, FileBarChart, LogOut, Coffee } from "lucide-react";
+import { LayoutDashboard, Users, FileBarChart, LogOut, Coffee, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { api } from "@shared/routes";
+import { useToast } from "@/hooks/use-toast";
+import { useMutation } from "@tanstack/react-query";
+import { queryClient } from "@/lib/queryClient";
 
 const NAV_ITEMS = [
   { label: "Dashboard", icon: LayoutDashboard, href: "/" },
   { label: "Users", icon: Users, href: "/users" },
   { label: "Reports", icon: FileBarChart, href: "/reports" },
+  { label: "Settings", icon: Settings, href: "/settings" },
 ];
 
 export function Sidebar() {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
+  const { toast } = useToast();
+
+  const logoutMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(api.users.logout.path, { method: "POST" });
+      if (!res.ok) throw new Error("Logout failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.setQueryData([api.users.me.path], null);
+      setLocation("/login");
+      toast({ title: "Signed out", description: "You have been logged out successfully." });
+    },
+  });
 
   return (
     <div className="w-64 border-r border-border bg-card flex flex-col h-screen fixed left-0 top-0 z-50">
@@ -52,7 +71,8 @@ export function Sidebar() {
       <div className="p-4 border-t border-border/50">
         <button
           className="flex items-center gap-3 px-4 py-3 w-full rounded-xl text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors"
-          onClick={() => alert("Logout logic here")}
+          onClick={() => logoutMutation.mutate()}
+          disabled={logoutMutation.isPending}
         >
           <LogOut className="h-5 w-5" />
           Sign Out
