@@ -27,24 +27,6 @@ export async function registerRoutes(
     secret: process.env.SESSION_SECRET || 'dev-secret'
   }));
 
-  // === Auth Middleware ===
-  const requireAuth = (req: any, res: any, next: any) => {
-    if (!req.session.user) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-    next();
-  };
-
-  const getAuthorizedUsers = () => {
-    const accessUsers = process.env.ACCESS_USERS || "";
-    // format: (user,pass),(user2,pass2)
-    const matches = accessUsers.matchAll(/\(([^,]+),([^)]+)\)/g);
-    const users: Record<string, string> = {};
-    for (const match of matches) {
-      users[match[1]] = match[2];
-    }
-    return users;
-  };
 
   // === API Routes ===
 
@@ -79,10 +61,6 @@ export async function registerRoutes(
     const { username, password } = req.body;
     const authorizedUsers = getAuthorizedUsers();
     
-    if (authorizedUsers[username] && authorizedUsers[username] === password) {
-      req.session.user = { username };
-      return res.json({ username });
-    }
     res.status(401).json({ message: "Invalid credentials" });
   });
 
@@ -92,12 +70,6 @@ export async function registerRoutes(
     });
   });
 
-  app.get(api.users.me.path, (req, res) => {
-    if (req.session.user) {
-      return res.json(req.session.user);
-    }
-    res.status(401).json({ message: "Not logged in" });
-  });
 
   app.get(api.users.list.path, requireAuth, async (req, res) => {
     const users = await storage.getAllUsers();
