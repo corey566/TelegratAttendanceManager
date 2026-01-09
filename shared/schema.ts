@@ -10,6 +10,7 @@ export const users = pgTable("users", {
   fullName: text("full_name"),
   email: text("email"),
   timezone: text("timezone").default("UTC"),
+  country: text("country"),
   isAdmin: boolean("is_admin").default(false),
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),

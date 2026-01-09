@@ -102,7 +102,9 @@ export async function setupBot() {
 
   bot.onText(/\/(.+)/, async (msg, match) => {
     const chatId = msg.chat.id.toString();
-    const command = match?.[1];
+    const rawCommand = match?.[1] || "";
+    // Handle commands with bot username suffix (e.g., /startlunch@botname)
+    const command = rawCommand.split('@')[0].trim();
     if (!command) return;
 
     // Log for debugging
@@ -130,7 +132,8 @@ export async function setupBot() {
         username: msg.from?.username,
         fullName: `${msg.from?.first_name || ""} ${msg.from?.last_name || ""}`.trim(),
         isActive: true,
-        isAdmin: false // Ensure new users are not admins by default
+        isAdmin: false,
+        country: "Unknown" // Default country
       });
       console.log(`Auto-registered new user: ${msg.from?.username || telegramId}`);
     }

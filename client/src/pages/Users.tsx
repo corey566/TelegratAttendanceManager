@@ -25,8 +25,9 @@ export default function UsersPage() {
 
         {/* Table Header */}
         <div className="grid grid-cols-12 gap-4 p-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b border-border/50 bg-muted/5">
-          <div className="col-span-4">User Details</div>
-          <div className="col-span-3">Telegram ID</div>
+          <div className="col-span-3">User Details</div>
+          <div className="col-span-2">Telegram ID</div>
+          <div className="col-span-2">Country</div>
           <div className="col-span-2">Timezone</div>
           <div className="col-span-2">Status</div>
           <div className="col-span-1 text-right">Admin</div>
@@ -60,7 +61,7 @@ export default function UsersPage() {
             key={user.id} 
             className="grid grid-cols-12 gap-4 p-4 items-center border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors group"
           >
-            <div className="col-span-4 flex items-center gap-3">
+            <div className="col-span-3 flex items-center gap-3">
               <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-primary/80 to-primary flex items-center justify-center text-primary-foreground font-bold shadow-sm">
                 {user.fullName?.[0] || user.username?.[0] || "?"}
               </div>
@@ -70,8 +71,12 @@ export default function UsersPage() {
               </div>
             </div>
             
-            <div className="col-span-3 text-sm font-mono text-muted-foreground">
+            <div className="col-span-2 text-sm font-mono text-muted-foreground">
               {user.telegramId}
+            </div>
+
+            <div className="col-span-2 text-sm text-muted-foreground">
+              {user.country || "Not set"}
             </div>
             
             <div className="col-span-2 text-sm text-muted-foreground">
