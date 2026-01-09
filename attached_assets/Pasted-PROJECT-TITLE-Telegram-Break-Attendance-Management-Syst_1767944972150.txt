@@ -1,0 +1,216 @@
+PROJECT TITLE
+
+Telegram Break & Attendance Management System (Serverless, Vercel-Deployed)
+
+🔹 OVERALL GOAL
+
+Build a full-featured Telegram-based break management system where all group members can manage their own breaks, receive automatic individual notifications, and where all data is stored, reported, exported, and visualized via a web dashboard.
+
+The system must be serverless, webhook-based, and deployable on Vercel.
+
+🔹 CORE REQUIREMENTS
+1. Telegram Bot (Webhook-Based)
+
+Built using Python
+
+Uses Telegram Webhooks (NO polling)
+
+Deployed as a Vercel Serverless Function
+
+Can be added to a Telegram group
+
+Works for all group members, not just admins
+
+🔹 USER FLOW (IMPORTANT)
+A. Scheduled Break Notification
+
+System allows setting a fixed daily break time (example: 4:00 PM)
+
+At that time:
+
+Bot sends a direct private message (DM) to every group member
+
+Message example:
+
+“⏰ Your break time has started. Please start your break.”
+
+⚠️ This message must be sent privately, NOT in the group.
+
+B. Starting / Ending Breaks
+
+Users can interact in either:
+
+The group chat
+
+OR directly with the bot in private
+
+Commands:
+
+/startbreak
+
+/endbreak
+
+/startlunch
+
+/endlunch
+
+Rules:
+
+Each user can only have one active break/lunch at a time
+
+Bot must prevent double-starts
+
+Bot must calculate duration automatically
+
+🔹 DATA TRACKING & STORAGE
+Use Google Sheets as the Database
+
+Google Sheets API
+
+Service Account authentication
+
+Each row stores:
+
+Timestamp
+User ID
+Username
+Full Name
+Email (if provided)
+Action (START_BREAK, END_BREAK, etc.)
+Duration (minutes)
+Date
+Week
+Month
+
+🔹 REPORTING & EXPORTS
+Reports must include:
+
+Daily report
+
+Weekly report
+
+Monthly report
+
+Reports can be:
+
+Viewed on the web dashboard
+
+Exported as Excel (.xlsx)
+
+Sent automatically by email if a user has an email registered
+
+🔹 EMAIL DELIVERY
+
+Users can optionally register their email using:
+/setemail someone@email.com
+
+System stores email securely
+
+On request or schedule:
+
+Generate Excel report
+
+Send it to the user via email
+
+Use a transactional email service (SendGrid / Resend / Nodemailer-compatible)
+
+🔹 WEB DASHBOARD
+Tech Stack
+
+Next.js
+
+Deployed on Vercel
+
+Uses API routes / server actions
+
+Reads data from Google Sheets
+
+Dashboard Features
+
+User list
+
+Individual user analytics
+
+Daily / weekly / monthly summaries
+
+Total break & lunch time
+
+Filters by date, user, period
+
+Download Excel reports
+
+Charts (bar, line, pie)
+
+🔹 PERMISSIONS & SECURITY
+
+Any group member can:
+
+Start/end their own break
+
+View their own data
+
+Dashboard supports:
+
+Admin view (all users)
+
+User view (only own data)
+
+No Telegram admin restriction
+
+🔹 TIME & SCHEDULING
+
+Support configurable timezone
+
+Scheduled break notifications must work reliably
+
+Use serverless cron or external scheduler compatible with Vercel
+
+🔹 DEPLOYMENT REQUIREMENTS
+
+Must be 100% compatible with Vercel
+
+No background workers
+
+Stateless functions
+
+All secrets via environment variables:
+
+BOT_TOKEN
+
+GOOGLE_SHEET_ID
+
+GOOGLE_CREDS_JSON
+
+EMAIL_API_KEY
+
+🔹 EXPECTED OUTPUT
+
+Generate:
+
+Telegram bot webhook handler (Python)
+
+Google Sheets integration
+
+Break duration logic
+
+User email registration flow
+
+Excel export logic
+
+Email sending logic
+
+Next.js web dashboard
+
+Deployment instructions for Vercel
+
+🔹 QUALITY EXPECTATIONS
+
+Production-ready code
+
+Clean architecture
+
+Modular structure
+
+Proper error handling
+
+Clear comments
