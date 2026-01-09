@@ -5,41 +5,96 @@ import { api } from "@shared/routes";
 import { z } from "zod";
 import * as xlsx from "xlsx";
 import { setupBot, processUpdate } from "./bot";
+import session from "express-session";
+import MemoryStoreFactory from "memorystore";
+
+const MemoryStore = MemoryStoreFactory(session);
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  
+  // === Session Config ===
+  app.use(session({
+    cookie: { maxAge: 86400000 },
+    store: new MemoryStore({
+      checkPeriod: 86400000 // prune expired entries every 24h
+    }),
+    resave: false,
+    saveUninitialized: false,
+    secret: process.env.SESSION_SECRET || 'dev-secret'
+  }));
+
+  // === Auth Middleware ===
+  const requireAuth = (req: any, res: any, next: any) => {
+    if (!req.session.user) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    next();
+  };
+
+  const getAuthorizedUsers = () => {
+    const accessUsers = process.env.ACCESS_USERS || "";
+    // format: (user:pass),(user2:pass2)
+    const matches = accessUsers.matchAll(/\(([^:]+):([^)]+)\)/g);
+    const users: Record<string, string> = {};
+    for (const match of matches) {
+      users[match[1]] = match[2];
+    }
+    return users;
+  };
+
   // === API Routes ===
   
-  app.get(api.users.list.path, async (req, res) => {
+  app.post(api.users.login.path, (req, res) => {
+    const { username, password } = req.body;
+    const authorizedUsers = getAuthorizedUsers();
+    
+    if (authorizedUsers[username] && authorizedUsers[username] === password) {
+      req.session.user = { username };
+      return res.json({ username });
+    }
+    res.status(401).json({ message: "Invalid credentials" });
+  });
+
+  app.post(api.users.logout.path, (req, res) => {
+    req.session.destroy(() => {
+      res.json({ success: true });
+    });
+  });
+
+  app.get(api.users.me.path, (req, res) => {
+    if (req.session.user) {
+      return res.json(req.session.user);
+    }
+    res.status(401).json({ message: "Not logged in" });
+  });
+
+  app.get(api.users.list.path, requireAuth, async (req, res) => {
     const users = await storage.getAllUsers();
     res.json(users);
   });
 
-  app.get(api.users.get.path, async (req, res) => {
+  app.get(api.users.get.path, requireAuth, async (req, res) => {
     const user = await storage.getUser(Number(req.params.id));
     if (!user) return res.status(404).json({ message: "User not found" });
     res.json(user);
   });
 
-  app.get(api.breaks.list.path, async (req, res) => {
+  app.get(api.breaks.list.path, requireAuth, async (req, res) => {
     const filters: any = {};
     if (req.query.userId) filters.userId = Number(req.query.userId);
     if (req.query.date) filters.date = String(req.query.date);
-    // Add date range handling if needed
     const breaks = await storage.getBreaks(filters);
     res.json(breaks);
   });
 
-  app.get(api.breaks.active.path, async (req, res) => {
+  app.get(api.breaks.active.path, requireAuth, async (req, res) => {
     const activeBreaks = await storage.getAllActiveBreaks();
     res.json(activeBreaks);
   });
 
-  app.get(api.stats.summary.path, async (req, res) => {
-    // Simple mock summary for now, can be expanded
+  app.get(api.stats.summary.path, requireAuth, async (req, res) => {
     const breaks = await storage.getBreaks();
     const activeBreaks = await storage.getAllActiveBreaks();
     const users = await storage.getAllUsers();
@@ -49,12 +104,12 @@ export async function registerRoutes(
     res.json({
       totalBreaks: breaks.length,
       totalDuration,
-      activeUsers: users.length, // Total registered users
+      activeUsers: users.length,
       onBreak: activeBreaks.length
     });
   });
 
-  app.get(api.export.excel.path, async (req, res) => {
+  app.get(api.export.excel.path, requireAuth, async (req, res) => {
     try {
       const breaks = await storage.getBreaks();
       const data = breaks.map(b => ({

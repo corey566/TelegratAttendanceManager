@@ -18,6 +18,30 @@ export const api = {
         404: z.object({ message: z.string() }),
       },
     },
+    me: {
+      method: 'GET' as const,
+      path: '/api/me',
+      responses: {
+        200: z.object({ username: z.string() }),
+        401: z.object({ message: z.string() }),
+      },
+    },
+    login: {
+      method: 'POST' as const,
+      path: '/api/login',
+      input: z.object({ username: z.string(), password: z.string() }),
+      responses: {
+        200: z.object({ username: z.string() }),
+        401: z.object({ message: z.string() }),
+      },
+    },
+    logout: {
+      method: 'POST' as const,
+      path: '/api/logout',
+      responses: {
+        200: z.object({ success: z.boolean() }),
+      },
+    },
   },
   breaks: {
     list: {
