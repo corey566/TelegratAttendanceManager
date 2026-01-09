@@ -105,10 +105,16 @@ export async function setupBot() {
     const command = match?.[1];
     if (!command) return;
 
+    // Log for debugging
+    console.log(`Processing command /${command} from user ${msg.from?.id} in chat ${chatId}`);
+
     // Check if group is active
     const groups = await storage.getGroups();
     const group = groups.find(g => g.chatId === chatId);
-    if (group && !group.isActive) return;
+    if (group && !group.isActive) {
+      console.log(`Group ${chatId} is inactive, ignoring command.`);
+      return;
+    }
 
     const telegramId = msg.from?.id.toString();
     if (!telegramId) return;
