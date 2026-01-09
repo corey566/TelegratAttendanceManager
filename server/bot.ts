@@ -20,14 +20,16 @@ export function setupBot() {
 
     // Track groups automatically
     if (msg.chat.type === "group" || msg.chat.type === "supergroup") {
-      const existingGroups = await storage.getGroups();
-      const isTracked = existingGroups.some(g => g.chatId === msg.chat.id.toString());
-      if (!isTracked) {
+      const existingGroup = await storage.getGroupById(msg.chat.id.toString());
+      if (!existingGroup) {
         await storage.addGroup({
           chatId: msg.chat.id.toString(),
           title: msg.chat.title || "Untitled Group",
           isActive: true
         });
+      } else if (existingGroup.title !== msg.chat.title) {
+        // Update title if it changed
+        await storage.updateGroup(msg.chat.id.toString(), { title: msg.chat.title });
       }
     }
   });

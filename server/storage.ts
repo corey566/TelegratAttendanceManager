@@ -149,6 +149,11 @@ export class DatabaseStorage implements IStorage {
     const [updated] = await db.update(telegramGroups).set(updates).where(eq(telegramGroups.chatId, chatId)).returning();
     return updated;
   }
+
+  async getGroupById(chatId: string): Promise<TelegramGroup | undefined> {
+    const [group] = await db.select().from(telegramGroups).where(eq(telegramGroups.chatId, chatId));
+    return group;
+  }
 }
 
 export const storage = new DatabaseStorage();
