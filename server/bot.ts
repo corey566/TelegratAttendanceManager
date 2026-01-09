@@ -7,10 +7,26 @@ let bot: TelegramBot | null = null;
 export async function getBotUpdates() {
   if (!bot) return [];
   try {
-    const updates = await bot.getUpdates({ offset: -1, limit: 10 });
+    // According to Telegram Bot API documentation, getUpdates returns an array of Update objects.
+    // Each update contains a message, which we use to identify the chat (group/private).
+    // We use a higher limit to ensure we catch recent interactions if the bot was offline.
+    const updates = await bot.getUpdates({ limit: 100, allowed_updates: ["message", "my_chat_member"] });
     for (const update of updates) {
       if (update.message) {
         await handleMessage(update.message);
+      }
+      // Handle being added to a group specifically
+      if (update.my_chat_member) {
+        const chat = update.my_chat_member.chat;
+        const chatId = chat.id.toString();
+        const existingGroup = await storage.getGroupById(chatId);
+        if (!existingGroup) {
+          await storage.addGroup({
+            chatId: chatId,
+            title: chat.title || chat.username || `Chat: ${chatId}`,
+            isActive: true
+          });
+        }
       }
     }
     return updates;
