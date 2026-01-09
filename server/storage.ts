@@ -113,6 +113,13 @@ export class DatabaseStorage implements IStorage {
 
   async createBreakCategory(category: InsertBreakCategory): Promise<BreakCategory> {
     const [newCategory] = await db.insert(breakCategories).values(category).returning();
+    // Force a bot command sync when a new category is added
+    import("./bot").then(m => m.setupBot().then(bot => {
+      if (bot) {
+        const sync = (bot as any).syncCommands;
+        if (sync) sync();
+      }
+    })).catch(() => {});
     return newCategory;
   }
 

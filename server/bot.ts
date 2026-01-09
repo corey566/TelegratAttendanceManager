@@ -77,6 +77,29 @@ export async function setupBot() {
 
   bot.on("message", handleMessage);
 
+  // Sync bot commands with Telegram
+  const syncCommands = async () => {
+    const categories = await storage.getBreakCategories();
+    const commands = categories
+      .filter(c => c.isActive)
+      .flatMap(c => [
+        { command: c.startCommand.toLowerCase(), description: `Start ${c.name}` },
+        { command: c.endCommand.toLowerCase(), description: `End ${c.name}` }
+      ]);
+    
+    if (bot) {
+      try {
+        await bot.setMyCommands(commands);
+        console.log("Bot commands synced with Telegram:", commands.length, "commands set");
+      } catch (error) {
+        console.error("Failed to sync bot commands:", error);
+      }
+    }
+  };
+
+  (bot as any).syncCommands = syncCommands;
+  syncCommands();
+
   bot.onText(/\/(.+)/, async (msg, match) => {
     const chatId = msg.chat.id.toString();
     const command = match?.[1];
