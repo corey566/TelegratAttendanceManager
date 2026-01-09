@@ -102,13 +102,12 @@ export async function setupBot() {
 
   bot.onText(/\/(.+)/, async (msg, match) => {
     const chatId = msg.chat.id.toString();
-    const rawCommand = match?.[1] || "";
-    // Handle commands with bot username suffix (e.g., /startlunch@botname)
-    const command = rawCommand.split('@')[0].trim();
+    const rawCommand = (match?.[1] || "").split('@')[0].trim().toLowerCase();
+    const command = rawCommand;
     if (!command) return;
 
     // Log for debugging
-    console.log(`Processing command /${command} from user ${msg.from?.id} in chat ${chatId}`);
+    console.log(`Processing command /${command} (raw: ${match?.[1]}) from user ${msg.from?.id} in chat ${chatId}`);
 
     // Check if group is active
     const groups = await storage.getGroups();
@@ -122,7 +121,10 @@ export async function setupBot() {
     if (!telegramId) return;
 
     const category = await storage.getBreakCategoryByCommand(command);
-    if (!category) return;
+    if (!category) {
+      console.log(`Command /${command} not recognized as a break category.`);
+      return;
+    }
 
     const user = await storage.getUserByTelegramId(telegramId);
     if (!user) {

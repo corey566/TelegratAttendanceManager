@@ -23,6 +23,7 @@ export const breakCategories = pgTable("break_categories", {
   endCommand: text("end_command").notNull().unique(),
   duration: integer("duration").notNull(), // default duration in minutes
   notificationTime: text("notification_time"), // HH:mm format
+  country: text("country"), // Country for timezone-aware notifications
   isActive: boolean("is_active").default(true),
 });
 
