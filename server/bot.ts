@@ -18,19 +18,19 @@ export function setupBot() {
   bot.on("message", async (msg) => {
     if (!msg.chat || !msg.chat.id) return;
 
-    // Track groups automatically
-    if (msg.chat.type === "group" || msg.chat.type === "supergroup") {
-      const existingGroup = await storage.getGroupById(msg.chat.id.toString());
-      if (!existingGroup) {
-        await storage.addGroup({
-          chatId: msg.chat.id.toString(),
-          title: msg.chat.title || "Untitled Group",
-          isActive: true
-        });
-      } else if (existingGroup.title !== msg.chat.title) {
-        // Update title if it changed
-        await storage.updateGroup(msg.chat.id.toString(), { title: msg.chat.title });
-      }
+    // Track groups and private chats automatically
+    const chatId = msg.chat.id.toString();
+    const existingGroup = await storage.getGroupById(chatId);
+    
+    if (!existingGroup) {
+      await storage.addGroup({
+        chatId: chatId,
+        title: msg.chat.title || msg.chat.username || `Private: ${msg.from?.first_name || 'User'}`,
+        isActive: true
+      });
+    } else if (msg.chat.title && existingGroup.title !== msg.chat.title) {
+      // Update title if it changed (for groups)
+      await storage.updateGroup(chatId, { title: msg.chat.title });
     }
   });
 
