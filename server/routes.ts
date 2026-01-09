@@ -193,7 +193,7 @@ export async function registerRoutes(
   });
 
   // === Telegram Bot Integration ===
-  const botInstance = setupBot();
+  const botInstance = await setupBot();
   
   // Cron for notifications
   cron.schedule('* * * * *', async () => {

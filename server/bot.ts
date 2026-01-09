@@ -4,15 +4,18 @@ import { format } from "date-fns";
 
 let bot: TelegramBot | null = null;
 
-export function setupBot() {
-  const token = process.env.BOT_TOKEN;
+export async function setupBot() {
+  const settings = await storage.getBotSettings();
+  const token = settings?.botToken || process.env.BOT_TOKEN;
+  
   if (!token) {
-    console.log("BOT_TOKEN is not set. Telegram bot will not start.");
+    console.log("BOT_TOKEN is not set in env or database. Telegram bot will not start.");
     return null;
   }
 
   if (bot) return bot;
 
+  console.log("Starting Telegram bot...");
   bot = new TelegramBot(token, { polling: true });
 
   bot.on("message", async (msg) => {
