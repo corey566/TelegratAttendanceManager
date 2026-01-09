@@ -76,7 +76,7 @@ app.use((req, res, next) => {
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
   } else {
-    const { setupVite } = await import("./vite");
+    const { setupVite } = await import("../shared/vite");
     await setupVite(httpServer, app);
   }
 

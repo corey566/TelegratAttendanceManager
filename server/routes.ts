@@ -37,8 +37,8 @@ export async function registerRoutes(
 
   const getAuthorizedUsers = () => {
     const accessUsers = process.env.ACCESS_USERS || "";
-    // format: (user:pass),(user2:pass2)
-    const matches = accessUsers.matchAll(/\(([^:]+):([^)]+)\)/g);
+    // format: (user,pass),(user2,pass2)
+    const matches = accessUsers.matchAll(/\(([^,]+),([^)]+)\)/g);
     const users: Record<string, string> = {};
     for (const match of matches) {
       users[match[1]] = match[2];
