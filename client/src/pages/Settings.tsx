@@ -235,6 +235,7 @@ export default function Settings() {
                           <TableHead>Commands</TableHead>
                           <TableHead>Duration</TableHead>
                           <TableHead>Notify</TableHead>
+                          <TableHead>Active</TableHead>
                           <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -243,12 +244,18 @@ export default function Settings() {
                           <TableRow key={cat.id}>
                             <TableCell className="font-medium">{cat.name}</TableCell>
                             <TableCell>
-                              <span className="text-xs bg-muted px-1.5 py-0.5 rounded">/{cat.startCommand}</span>
-                              <span className="mx-1 text-muted-foreground">/</span>
-                              <span className="text-xs bg-muted px-1.5 py-0.5 rounded">/{cat.endCommand}</span>
+                              <div className="flex flex-wrap gap-1">
+                                <span className="text-xs bg-muted px-1.5 py-0.5 rounded">/{cat.startCommand}</span>
+                                <span className="text-xs bg-muted px-1.5 py-0.5 rounded">/{cat.endCommand}</span>
+                              </div>
                             </TableCell>
                             <TableCell>{cat.duration}m</TableCell>
                             <TableCell>{cat.notificationTime || "None"}</TableCell>
+                            <TableCell>
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${cat.isActive ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                                {cat.isActive ? "YES" : "NO"}
+                              </span>
+                            </TableCell>
                             <TableCell className="text-right">
                               <Button 
                                 variant="ghost" 
@@ -370,8 +377,21 @@ export default function Settings() {
                     <TableBody>
                       {groups?.map((group) => (
                         <TableRow key={group.chatId}>
-                          <TableCell className="font-medium">{group.title || "Unknown Group"}</TableCell>
+                          <TableCell className="font-medium">{group.title || "Unknown Chat"}</TableCell>
                           <TableCell className="font-mono text-xs">{group.chatId}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-col gap-1">
+                              {categories?.filter(c => c.isActive).map(cat => (
+                                <div key={cat.id} className="flex gap-1">
+                                  <span className="text-[10px] bg-blue-50 text-blue-700 px-1 rounded">/{cat.startCommand}</span>
+                                  <span className="text-[10px] bg-slate-50 text-slate-700 px-1 rounded">/{cat.endCommand}</span>
+                                </div>
+                              ))}
+                              {(!categories || categories.filter(c => c.isActive).length === 0) && (
+                                <span className="text-[10px] text-muted-foreground italic">No active commands</span>
+                              )}
+                            </div>
+                          </TableCell>
                           <TableCell>
                             <span className={`px-2 py-1 rounded-full text-xs ${group.isActive ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
                               {group.isActive ? "Active" : "Inactive"}

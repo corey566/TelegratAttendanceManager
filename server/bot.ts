@@ -40,16 +40,24 @@ async function handleMessage(msg: TelegramBot.Message) {
   if (!msg.chat || !msg.chat.id) return;
 
   const chatId = msg.chat.id.toString();
+  const telegramId = msg.from?.id.toString();
+
+  // If it's a private chat, try to use username or first_name for the "group" title
+  let title = msg.chat.title;
+  if (msg.chat.type === "private") {
+    title = msg.from?.username || msg.from?.first_name || `User ${telegramId}`;
+  }
+
   const existingGroup = await storage.getGroupById(chatId);
   
   if (!existingGroup) {
     await storage.addGroup({
       chatId: chatId,
-      title: msg.chat.title || msg.chat.username || `Private: ${msg.from?.first_name || 'User'}`,
+      title: title || "Untitled Chat",
       isActive: true
     });
-  } else if (msg.chat.title && existingGroup.title !== msg.chat.title) {
-    await storage.updateGroup(chatId, { title: msg.chat.title });
+  } else if (title && existingGroup.title !== title) {
+    await storage.updateGroup(chatId, { title: title });
   }
 }
 
