@@ -25,6 +25,29 @@ export const breakCategories = pgTable("break_categories", {
   isActive: boolean("is_active").default(true),
 });
 
+export const botSettings = pgTable("bot_settings", {
+  id: serial("id").primaryKey(),
+  botToken: text("bot_token"),
+  reportEmails: text("report_emails").array(), // Emails to receive reports
+  reportTelegramIds: text("report_telegram_ids").array(), // Telegram IDs to receive reports
+  reportSchedule: text("report_schedule"), // cron format
+});
+
+export const telegramGroups = pgTable("telegram_groups", {
+  id: serial("id").primaryKey(),
+  chatId: text("chat_id").notNull().unique(),
+  title: text("title"),
+  isActive: boolean("is_active").default(true),
+});
+
+export const insertBotSettingsSchema = createInsertSchema(botSettings).omit({ id: true });
+export const insertTelegramGroupSchema = createInsertSchema(telegramGroups).omit({ id: true });
+
+export type BotSettings = typeof botSettings.$inferSelect;
+export type TelegramGroup = typeof telegramGroups.$inferSelect;
+export type InsertBotSettings = z.infer<typeof insertBotSettingsSchema>;
+export type InsertTelegramGroup = z.infer<typeof insertTelegramGroupSchema>;
+
 export const breaks = pgTable("breaks", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id),
