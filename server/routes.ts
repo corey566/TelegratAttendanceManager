@@ -7,6 +7,7 @@ import * as xlsx from "xlsx";
 import { setupBot, processUpdate } from "./bot";
 import session from "express-session";
 import MemoryStoreFactory from "memorystore";
+import cron from "node-cron";
 
 const MemoryStore = MemoryStoreFactory(session);
 
@@ -161,7 +162,6 @@ export async function registerRoutes(
   const botInstance = setupBot();
   
   // Cron for notifications
-  const cron = require('node-cron');
   cron.schedule('* * * * *', async () => {
     const categories = await storage.getBreakCategories();
     const now = format(new Date(), 'HH:mm');
