@@ -25,9 +25,15 @@ function Router() {
     if (!isLoading && !user && location !== "/login") {
       setLocation("/login");
     }
+    // If logged in and on login page, redirect to home
+    if (!isLoading && user && location === "/login") {
+      setLocation("/");
+    }
   }, [user, isLoading, location, setLocation]);
 
-  if (isLoading) return <div className="flex items-center justify-center h-screen">Loading...</div>;
+  // Only show loading if we are still fetching auth AND not on the login page
+  // If we are on the login page, we can show the login form even while checking auth (it will redirect if found)
+  if (isLoading && location !== "/login") return <div className="flex items-center justify-center h-screen">Loading...</div>;
 
   return (
     <Switch>
