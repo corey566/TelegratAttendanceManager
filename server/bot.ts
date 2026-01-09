@@ -16,6 +16,13 @@ export function setupBot() {
   bot = new TelegramBot(token, { polling: true });
 
   bot.on("message", async (msg) => {
+    console.log("Bot received message:", {
+      chatId: msg.chat.id,
+      chatType: msg.chat.type,
+      text: msg.text,
+      from: msg.from?.username
+    });
+
     if (!msg.chat || !msg.chat.id) return;
 
     // Track groups and private chats automatically
@@ -23,6 +30,7 @@ export function setupBot() {
     const existingGroup = await storage.getGroupById(chatId);
     
     if (!existingGroup) {
+      console.log("Registering new group:", chatId);
       await storage.addGroup({
         chatId: chatId,
         title: msg.chat.title || msg.chat.username || `Private: ${msg.from?.first_name || 'User'}`,
@@ -30,6 +38,7 @@ export function setupBot() {
       });
     } else if (msg.chat.title && existingGroup.title !== msg.chat.title) {
       // Update title if it changed (for groups)
+      console.log("Updating group title:", chatId);
       await storage.updateGroup(chatId, { title: msg.chat.title });
     }
   });
