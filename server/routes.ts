@@ -12,6 +12,12 @@ import { format } from "date-fns";
 
 const MemoryStore = MemoryStoreFactory(session);
 
+declare module 'express-session' {
+  interface SessionData {
+    user: { username: string };
+  }
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -38,7 +44,7 @@ export async function registerRoutes(
   const getAuthorizedUsers = () => {
     const accessUsers = process.env.ACCESS_USERS || "";
     // format: (user,pass),(user2,pass2)
-    const matches = accessUsers.matchAll(/\(([^,]+),([^)]+)\)/g);
+    const matches = Array.from(accessUsers.matchAll(/\(([^,]+),([^)]+)\)/g));
     const users: Record<string, string> = {};
     for (const match of matches) {
       users[match[1]] = match[2];
