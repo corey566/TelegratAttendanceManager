@@ -47,7 +47,34 @@ export async function registerRoutes(
   };
 
   // === API Routes ===
-  
+
+  // Bot Settings
+  app.get("/api/settings/bot", requireAuth, async (req, res) => {
+    const settings = await storage.getBotSettings();
+    res.json(settings || {});
+  });
+
+  app.post("/api/settings/bot", requireAuth, async (req, res) => {
+    const settings = await storage.updateBotSettings(req.body);
+    res.json(settings);
+  });
+
+  // Telegram Groups
+  app.get("/api/settings/groups", requireAuth, async (req, res) => {
+    const groups = await storage.getGroups();
+    res.json(groups);
+  });
+
+  app.post("/api/settings/groups", requireAuth, async (req, res) => {
+    const group = await storage.addGroup(req.body);
+    res.json(group);
+  });
+
+  app.patch("/api/settings/groups/:chatId", requireAuth, async (req, res) => {
+    const group = await storage.updateGroup(req.params.chatId, req.body);
+    res.json(group);
+  });
+
   app.post(api.users.login.path, (req, res) => {
     const { username, password } = req.body;
     const authorizedUsers = getAuthorizedUsers();
