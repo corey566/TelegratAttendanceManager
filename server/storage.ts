@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { users, breaks, type User, type InsertUser, type Break, type InsertBreak } from "@shared/schema";
+import { users, breaks, breakCategories, type User, type InsertUser, type Break, type InsertBreak, type BreakCategory, type InsertBreakCategory } from "@shared/schema";
 import { eq, and, isNull, desc, gte, lte } from "drizzle-orm";
 
 export interface IStorage {
@@ -16,6 +16,12 @@ export interface IStorage {
   getActiveBreak(userId: number): Promise<Break | undefined>;
   getBreaks(filters?: { userId?: number; date?: string; startDate?: Date; endDate?: Date }): Promise<Break[]>;
   getAllActiveBreaks(): Promise<Break[]>;
+
+  // Category operations
+  getBreakCategories(): Promise<BreakCategory[]>;
+  getBreakCategoryByCommand(command: string): Promise<BreakCategory | undefined>;
+  createBreakCategory(category: InsertBreakCategory): Promise<BreakCategory>;
+  deleteBreakCategory(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -78,6 +84,31 @@ export class DatabaseStorage implements IStorage {
 
   async getAllActiveBreaks(): Promise<Break[]> {
     return await db.select().from(breaks).where(isNull(breaks.endTime));
+  }
+
+  async getBreakCategories(): Promise<BreakCategory[]> {
+    return await db.select().from(breakCategories);
+  }
+
+  async getBreakCategoryByCommand(command: string): Promise<BreakCategory | undefined> {
+    const [category] = await db.select()
+      .from(breakCategories)
+      .where(and(eq(breakCategories.isActive, true), eq(breakCategories.startCommand, command)));
+    if (category) return category;
+
+    const [endCategory] = await db.select()
+      .from(breakCategories)
+      .where(and(eq(breakCategories.isActive, true), eq(breakCategories.endCommand, command)));
+    return endCategory;
+  }
+
+  async createBreakCategory(category: InsertBreakCategory): Promise<BreakCategory> {
+    const [newCategory] = await db.insert(breakCategories).values(category).returning();
+    return newCategory;
+  }
+
+  async deleteBreakCategory(id: number): Promise<void> {
+    await db.delete(breakCategories).where(eq(breakCategories.id, id));
   }
 }
 

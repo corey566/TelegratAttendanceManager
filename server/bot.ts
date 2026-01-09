@@ -46,32 +46,26 @@ export function setupBot() {
     }
   });
 
-  bot.onText(/\/startbreak/, async (msg) => handleBreak(msg, 'break', 'start'));
-  bot.onText(/\/endbreak/, async (msg) => handleBreak(msg, 'break', 'end'));
-  bot.onText(/\/startlunch/, async (msg) => handleBreak(msg, 'lunch', 'start'));
-  bot.onText(/\/endlunch/, async (msg) => handleBreak(msg, 'lunch', 'end'));
-  bot.onText(/\/setemail (.+)/, async (msg, match) => {
-    const chatId = msg.chat.id;
-    const userId = msg.from?.id.toString();
-    const email = match?.[1];
+  bot.onText(/\/(.+)/, async (msg, match) => {
+    const command = match?.[1];
+    if (['start', 'setemail'].includes(command || '')) return;
 
-    if (!userId || !email) return;
+    const categories = await storage.getBreakCategories();
+    const startCat = categories.find(c => c.startCommand === command);
+    const endCat = categories.find(c => c.endCommand === command);
 
-    const user = await storage.getUserByTelegramId(userId);
-    if (!user) {
-      bot?.sendMessage(chatId, "Please /start first.");
-      return;
+    if (startCat) {
+      await handleBreak(msg, startCat.name, 'start', startCat.id);
+    } else if (endCat) {
+      await handleBreak(msg, endCat.name, 'end', endCat.id);
     }
-
-    await storage.updateUser(user.id, { email });
-    bot?.sendMessage(chatId, `Email updated to ${email}`);
   });
 
   console.log('Telegram bot setup complete (Webhook mode).');
   return bot;
 }
 
-async function handleBreak(msg: TelegramBot.Message, type: 'break' | 'lunch', action: 'start' | 'end') {
+async function handleBreak(msg: TelegramBot.Message, type: string, action: 'start' | 'end', categoryId?: number) {
   const chatId = msg.chat.id;
   const telegramId = msg.from?.id.toString();
   if (!telegramId) return;
@@ -92,6 +86,7 @@ async function handleBreak(msg: TelegramBot.Message, type: 'break' | 'lunch', ac
 
     await storage.createBreak({
       userId: user.id,
+      categoryId: categoryId,
       type,
       startTime: new Date(),
       date: new Date().toISOString().split('T')[0]
@@ -105,17 +100,11 @@ async function handleBreak(msg: TelegramBot.Message, type: 'break' | 'lunch', ac
       return;
     }
     
-    // Check if trying to end wrong type? Optional.
-    if (activeBreak.type !== type) {
-       bot?.sendMessage(chatId, `You are currently on ${activeBreak.type}, not ${type}. Use /end${activeBreak.type} instead.`);
-       return;
-    }
-
     const endTime = new Date();
     const duration = Math.round((endTime.getTime() - new Date(activeBreak.startTime).getTime()) / 60000);
     
     await storage.endBreak(activeBreak.id, endTime, duration);
-    bot?.sendMessage(chatId, `Ended ${type} at ${format(endTime, 'HH:mm')}. Duration: ${duration} mins.`);
+    bot?.sendMessage(chatId, `Ended ${activeBreak.type} at ${format(endTime, 'HH:mm')}. Duration: ${duration} mins.`);
   }
 }
 

@@ -89,6 +89,38 @@ export const api = {
         200: z.any(),
       },
     }
+  },
+  settings: {
+    categories: {
+      list: {
+        method: 'GET' as const,
+        path: '/api/settings/categories',
+        responses: {
+          200: z.array(z.custom<any>()),
+        },
+      },
+      create: {
+        method: 'POST' as const,
+        path: '/api/settings/categories',
+        input: z.object({
+          name: z.string(),
+          startCommand: z.string(),
+          endCommand: z.string(),
+          duration: z.number(),
+          notificationTime: z.string().optional(),
+        }),
+        responses: {
+          201: z.custom<any>(),
+        },
+      },
+      delete: {
+        method: 'DELETE' as const,
+        path: '/api/settings/categories/:id',
+        responses: {
+          204: z.void(),
+        },
+      },
+    },
   }
 };
 

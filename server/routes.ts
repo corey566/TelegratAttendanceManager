@@ -137,8 +137,48 @@ export async function registerRoutes(
     }
   });
 
+  app.get(api.settings.categories.list.path, requireAuth, async (req, res) => {
+    const categories = await storage.getBreakCategories();
+    res.json(categories);
+  });
+
+  app.post(api.settings.categories.create.path, requireAuth, async (req, res) => {
+    try {
+      const input = api.settings.categories.create.input.parse(req.body);
+      const category = await storage.createBreakCategory(input);
+      res.status(201).json(category);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid category data" });
+    }
+  });
+
+  app.delete(api.settings.categories.delete.path, requireAuth, async (req, res) => {
+    await storage.deleteBreakCategory(Number(req.params.id));
+    res.sendStatus(204);
+  });
+
   // === Telegram Bot Integration ===
-  setupBot();
+  const botInstance = setupBot();
+  
+  // Cron for notifications
+  const cron = require('node-cron');
+  cron.schedule('* * * * *', async () => {
+    const categories = await storage.getBreakCategories();
+    const now = format(new Date(), 'HH:mm');
+    
+    for (const cat of categories) {
+      if (cat.notificationTime === now && botInstance) {
+        const users = await storage.getAllUsers();
+        for (const user of users) {
+          try {
+            await botInstance.sendMessage(user.telegramId, `⏰ Your ${cat.name} time has started. Please use /${cat.startCommand} to begin.`);
+          } catch (e) {
+            console.error(`Failed to notify ${user.telegramId}`);
+          }
+        }
+      }
+    }
+  });
   
   app.post('/api/telegram/webhook', async (req, res) => {
     processUpdate(req.body);

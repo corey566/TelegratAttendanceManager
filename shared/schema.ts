@@ -15,17 +15,28 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const breakCategories = pgTable("break_categories", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  startCommand: text("start_command").notNull().unique(),
+  endCommand: text("end_command").notNull().unique(),
+  duration: integer("duration").notNull(), // default duration in minutes
+  notificationTime: text("notification_time"), // HH:mm format
+  isActive: boolean("is_active").default(true),
+});
+
 export const breaks = pgTable("breaks", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id),
-  type: text("type").notNull(), // 'break' | 'lunch'
+  categoryId: integer("category_id").references(() => breakCategories.id),
+  type: text("type").notNull(), 
   startTime: timestamp("start_time").notNull(),
   endTime: timestamp("end_time"),
-  duration: integer("duration"), // in minutes
-  date: text("date").notNull(), // YYYY-MM-DD
+  duration: integer("duration"), 
+  date: text("date").notNull(), 
 });
 
-export const usersRelations = relations(users, ({ many }) => ({
+export const breakCategoriesRelations = relations(breakCategories, ({ many }) => ({
   breaks: many(breaks),
 }));
 
@@ -34,7 +45,16 @@ export const breaksRelations = relations(breaks, ({ one }) => ({
     fields: [breaks.userId],
     references: [users.id],
   }),
+  category: one(breakCategories, {
+    fields: [breaks.categoryId],
+    references: [breakCategories.id],
+  }),
 }));
+
+export const insertBreakCategorySchema = createInsertSchema(breakCategories).omit({ id: true });
+export type BreakCategory = typeof breakCategories.$inferSelect;
+export type InsertBreakCategory = z.infer<typeof insertBreakCategorySchema>;
+
 
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertBreakSchema = createInsertSchema(breaks).omit({ id: true, duration: true });
