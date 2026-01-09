@@ -28,8 +28,6 @@ export async function registerRoutes(
   }));
 
 
-  // === API Routes ===
-
   // Bot Settings
   app.get("/api/settings/bot", requireAuth, async (req, res) => {
     const settings = await storage.getBotSettings();
@@ -61,7 +59,6 @@ export async function registerRoutes(
     const { username, password } = req.body;
     const authorizedUsers = getAuthorizedUsers();
     
-    res.status(401).json({ message: "Invalid credentials" });
   });
 
   app.post(api.users.logout.path, (req, res) => {
@@ -71,7 +68,6 @@ export async function registerRoutes(
   });
 
 
-  app.get(api.users.list.path, requireAuth, async (req, res) => {
     const users = await storage.getAllUsers();
     res.json(users);
   });

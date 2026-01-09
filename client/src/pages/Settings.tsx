@@ -13,10 +13,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
-export default function Settings() {
-  const { toast } = useToast();
-  
-  // Break Category State
   const [name, setName] = useState("");
   const [startCommand, setStartCommand] = useState("");
   const [endCommand, setEndCommand] = useState("");
@@ -142,7 +138,6 @@ export default function Settings() {
     });
   };
 
-        <h1 className="text-3xl font-bold">Settings</h1>
 
         <Tabs defaultValue="categories" className="w-full">
           <TabsList className="grid w-full grid-cols-3 mb-8">
