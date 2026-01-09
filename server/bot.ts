@@ -129,8 +129,10 @@ export async function setupBot() {
         telegramId,
         username: msg.from?.username,
         fullName: `${msg.from?.first_name || ""} ${msg.from?.last_name || ""}`.trim(),
-        isActive: true
+        isActive: true,
+        isAdmin: false // Ensure new users are not admins by default
       });
+      console.log(`Auto-registered new user: ${msg.from?.username || telegramId}`);
     }
 
     const dbUser = await storage.getUserByTelegramId(telegramId);
