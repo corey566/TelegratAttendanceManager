@@ -63,6 +63,9 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // We'll skip npx drizzle-kit push in dev as it seems to be causing connection issues with the pg driver in this environment
+  // and Replit handles it via other means usually.
+  /*
   if (process.env.NODE_ENV === "production" || process.env.REPL_ID) {
     log("Ensuring database schema is up to date...");
     try {
@@ -73,6 +76,7 @@ app.use((req, res, next) => {
       log(`Schema push failed: ${error}`, "error");
     }
   }
+  */
 
   await registerRoutes(httpServer, app);
 
