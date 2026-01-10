@@ -10,7 +10,7 @@ export const mailTransporter = nodemailer.createTransport({
   },
 });
 
-export async function sendMail({ to, subject, text, html }: { to: string | string[], subject: string, text?: string, html?: string }) {
+export async function sendMail({ to, subject, text, html, attachments }: { to: string | string[], subject: string, text?: string, html?: string, attachments?: { filename: string, content: Buffer }[] }) {
   try {
     const info = await mailTransporter.sendMail({
       from: process.env.SMTP_FROM,
@@ -18,6 +18,7 @@ export async function sendMail({ to, subject, text, html }: { to: string | strin
       subject,
       text,
       html,
+      attachments,
     });
     console.log("Email sent: %s", info.messageId);
     return info;
