@@ -49,11 +49,21 @@ async function handleMessage(msg: TelegramBot.Message) {
   const existingGroup = await storage.getGroupById(chatId);
   
   if (!existingGroup) {
-    await storage.addGroup({
-      chatId: chatId,
-      title: title || "Untitled Chat",
-      isActive: true
-    });
+    try {
+      await storage.addGroup({
+        chatId: chatId,
+        title: title || "Untitled Chat",
+        isActive: true
+      });
+      console.log(`Added new group: ${title || chatId}`);
+    } catch (e: any) {
+      // In case of race condition or duplicate key error
+      if (e.code === '23505') {
+        console.log(`Group ${chatId} already exists (handled race condition)`);
+      } else {
+        console.error(`Failed to add group ${chatId}:`, e);
+      }
+    }
   } else if (title && existingGroup.title !== title) {
     await storage.updateGroup(chatId, { title: title });
   }
