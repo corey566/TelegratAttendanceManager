@@ -1,5 +1,5 @@
 // Set global application timezone
-process.env.TZ = 'Asia/Colombo';
+process.env.TZ = "Asia/Colombo";
 
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
@@ -67,7 +67,7 @@ app.use((req, res, next) => {
     log("Ensuring database schema is up to date...");
     try {
       const { execSync } = await import("child_process");
-      // Use npx drizzle-kit push directly. The error 'ENOTFOUND base' usually happens when 
+      // Use npx drizzle-kit push directly. The error 'ENOTFOUND base' usually happens when
       // DATABASE_URL is misconfigured or empty.
       execSync("npx drizzle-kit push", { stdio: "inherit" });
       log("Schema push completed successfully.");
@@ -100,7 +100,7 @@ app.use((req, res, next) => {
   // Other ports are firewalled. Default to 5000 if not specified.
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || "5000", 10);
+  const port = parseInt(process.env.PORT || "3000", 10);
   httpServer.listen(
     {
       port,
