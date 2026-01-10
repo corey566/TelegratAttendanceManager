@@ -9,7 +9,8 @@ import { sendMail } from "./mail";
 import session from "express-session";
 import MemoryStoreFactory from "memorystore";
 import cron from "node-cron";
-import { format } from "date-fns";
+import { format, addMinutes } from "date-fns";
+import { formatInTimeZone, toDate } from "date-fns-tz";
 
 const MemoryStore = MemoryStoreFactory(session);
 
@@ -172,13 +173,13 @@ export async function registerRoutes(
   app.get(api.export.excel.path, requireAuth, async (req, res) => {
     try {
       const breaks = await storage.getBreaks();
-      const data = breaks.map(b => ({
+        const data = breaks.map(b => ({
         ID: b.id,
         UserID: b.userId,
         Type: b.type,
         Date: b.date,
-        StartTime: b.startTime,
-        EndTime: b.endTime,
+        StartTime: formatInTimeZone(b.startTime, 'Asia/Colombo', "yyyy-MM-dd HH:mm:ss"),
+        EndTime: b.endTime ? formatInTimeZone(b.endTime, 'Asia/Colombo', "yyyy-MM-dd HH:mm:ss") : "Active",
         DurationMinutes: b.duration
       }));
 
@@ -223,10 +224,16 @@ export async function registerRoutes(
   // Cron for notifications
   cron.schedule('* * * * *', async () => {
     const categories = await storage.getBreakCategories();
-    const now = format(new Date(), 'HH:mm');
+    const now = new Date();
     
     for (const cat of categories) {
-      if (cat.notificationTime === now && botInstance) {
+      if (!cat.isActive || !cat.notificationTime) continue;
+
+      // Default to Asia/Colombo (GMT+5:30)
+      const timezone = 'Asia/Colombo'; 
+      const nowInTz = formatInTimeZone(now, timezone, 'HH:mm');
+
+      if (cat.notificationTime === nowInTz && botInstance) {
         const users = await storage.getAllUsers();
         for (const user of users) {
           try {

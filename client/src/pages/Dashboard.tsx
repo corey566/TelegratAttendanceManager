@@ -1,10 +1,11 @@
+import { format } from "date-fns";
+import { formatInTimeZone } from "date-fns-tz";
 import { Layout } from "@/components/Layout";
 import { StatCard } from "@/components/StatCard";
 import { useStatsSummary } from "@/hooks/use-stats";
 import { useActiveBreaks } from "@/hooks/use-breaks";
 import { Users, Clock, Coffee, AlertCircle } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import { format } from "date-fns";
 
 export default function Dashboard() {
   const { data: stats, isLoading: statsLoading } = useStatsSummary('daily');
@@ -121,7 +122,7 @@ export default function Dashboard() {
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-sm truncate">User #{item.userId}</p>
                     <p className="text-xs text-muted-foreground truncate">
-                      Started {format(new Date(item.startTime), "h:mm a")} • {item.type}
+                      Started {formatInTimeZone(new Date(item.startTime), 'Asia/Colombo', "h:mm a")} • {item.type}
                     </p>
                   </div>
                   <div className="h-2 w-2 rounded-full bg-orange-500 animate-pulse" />

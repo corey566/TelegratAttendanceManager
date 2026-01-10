@@ -2,6 +2,7 @@ import { Layout } from "@/components/Layout";
 import { useUsers } from "@/hooks/use-users";
 import { BadgeCheck, BadgeAlert, Search, User as UserIcon } from "lucide-react";
 import { format } from "date-fns";
+import { formatInTimeZone } from "date-fns-tz";
 
 export default function UsersPage() {
   const { data: users, isLoading } = useUsers();

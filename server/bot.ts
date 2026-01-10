@@ -2,6 +2,7 @@
 import TelegramBot from "node-telegram-bot-api";
 import { storage } from "./storage";
 import { format } from "date-fns";
+import { formatInTimeZone } from "date-fns-tz";
 
 // Use proper types for the bot
 let bot: TelegramBot | null = null;
@@ -154,7 +155,7 @@ export async function setupBot() {
         categoryId: category.id,
         type: category.name,
         startTime: new Date(),
-        date: format(new Date(), "yyyy-MM-dd")
+        date: formatInTimeZone(new Date(), 'Asia/Colombo', "yyyy-MM-dd")
       });
 
       bot?.sendMessage(chatId, `@${msg.from?.username || msg.from?.first_name}, started your ${category.name}. Limit: ${category.duration}m.`);

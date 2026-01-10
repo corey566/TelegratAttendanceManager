@@ -1,3 +1,6 @@
+// Set global application timezone
+process.env.TZ = 'Asia/Colombo';
+
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";

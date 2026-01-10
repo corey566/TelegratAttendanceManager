@@ -3,6 +3,7 @@ import { Layout } from "@/components/Layout";
 import { useBreaks } from "@/hooks/use-breaks";
 import { FileDown, Calendar as CalendarIcon, Filter, Clock } from "lucide-react";
 import { format } from "date-fns";
+import { formatInTimeZone } from "date-fns-tz";
 import { api } from "@shared/routes";
 
 export default function ReportsPage() {
@@ -107,10 +108,10 @@ export default function ReportsPage() {
                         </span>
                       </td>
                       <td className="p-4 text-sm text-muted-foreground">
-                        {format(new Date(log.startTime), "h:mm a")}
+                        {formatInTimeZone(new Date(log.startTime), 'Asia/Colombo', "h:mm a")}
                       </td>
                       <td className="p-4 text-sm text-muted-foreground">
-                        {log.endTime ? format(new Date(log.endTime), "h:mm a") : <span className="text-orange-500 font-medium animate-pulse">Active</span>}
+                        {log.endTime ? formatInTimeZone(new Date(log.endTime), 'Asia/Colombo', "h:mm a") : <span className="text-orange-500 font-medium animate-pulse">Active</span>}
                       </td>
                       <td className="p-4 text-right">
                         {duration ? (
