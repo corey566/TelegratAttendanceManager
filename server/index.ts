@@ -63,20 +63,18 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  // We'll skip npx drizzle-kit push in dev as it seems to be causing connection issues with the pg driver in this environment
-  // and Replit handles it via other means usually.
-  /*
   if (process.env.NODE_ENV === "production" || process.env.REPL_ID) {
     log("Ensuring database schema is up to date...");
     try {
       const { execSync } = await import("child_process");
+      // Use npx drizzle-kit push directly. The error 'ENOTFOUND base' usually happens when 
+      // DATABASE_URL is misconfigured or empty.
       execSync("npx drizzle-kit push", { stdio: "inherit" });
       log("Schema push completed successfully.");
     } catch (error) {
       log(`Schema push failed: ${error}`, "error");
     }
   }
-  */
 
   await registerRoutes(httpServer, app);
 
