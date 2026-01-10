@@ -245,7 +245,7 @@ export async function registerRoutes(
     for (const cat of categories) {
       if (!cat.isActive || !cat.notificationTime) continue;
 
-      // Default to Asia/Colombo (GMT+5:30)
+      // Ensure we are using Sri Lanka time for the alert check
       const timezone = 'Asia/Colombo'; 
       const nowInTz = formatInTimeZone(now, timezone, 'HH:mm');
 

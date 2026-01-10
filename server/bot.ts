@@ -175,7 +175,9 @@ export async function setupBot() {
       setTimeout(async () => {
         const currentBreak = await storage.getActiveBreak(dbUser.id);
         if (currentBreak && currentBreak.categoryId === category.id) {
-          bot?.sendMessage(dbUser.telegramId, `⚠️ Reminder: Your ${category.name} limit of ${category.duration}m is being reached. Please remember to end your break!`);
+          // Send reminder in Sri Lanka time context
+          const nowLanka = formatInTimeZone(new Date(), 'Asia/Colombo', "HH:mm:ss");
+          bot?.sendMessage(dbUser.telegramId, `⚠️ Reminder (${nowLanka}): Your ${category.name} limit of ${category.duration}m is being reached. Please remember to end your break!`);
         }
       }, reminderTimeout);
     } else if (command === category.endCommand) {
