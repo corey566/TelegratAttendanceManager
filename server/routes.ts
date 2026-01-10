@@ -211,9 +211,12 @@ export async function registerRoutes(
   app.get(api.export.excel.path, requireAuth, async (req, res) => {
     try {
       const breaks = await storage.getBreaks();
-        const data = breaks.map(b => ({
+      const users = await storage.getAllUsers();
+      const userMap = new Map(users.map(u => [u.id, u.fullName || u.username || `User ${u.id}`]));
+
+      const data = breaks.map(b => ({
         ID: b.id,
-        UserID: b.userId,
+        User: userMap.get(b.userId) || b.userId,
         Type: b.type,
         Date: b.date,
         StartTime: formatInTimeZone(b.startTime, 'Asia/Colombo', "yyyy-MM-dd HH:mm:ss"),
