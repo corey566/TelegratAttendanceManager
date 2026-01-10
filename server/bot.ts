@@ -1,3 +1,4 @@
+// @ts-ignore
 import TelegramBot from "node-telegram-bot-api";
 import { storage } from "./storage";
 import { format } from "date-fns";

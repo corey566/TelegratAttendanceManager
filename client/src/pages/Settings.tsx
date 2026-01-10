@@ -354,8 +354,24 @@ export default function Settings() {
                         placeholder="your-email@example.com" 
                         value={testEmail} 
                         onChange={(e) => setTestEmail(e.target.value)} 
+                        data-testid="input-test-email"
                       />
-                      <Button type="button" variant="outline" onClick={handleBotSubmit} disabled={updateBotMutation.isPending || !testEmail}>
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        onClick={() => {
+                          updateBotMutation.mutate({
+                            botToken,
+                            reportEmails: emails.split(",").map(e => e.trim()).filter(Boolean),
+                            reportTelegramIds: telegramIds.split(",").map(id => id.trim()).filter(Boolean),
+                            reportSchedule,
+                            testEmail: testEmail || undefined,
+                          });
+                          setTestEmail("");
+                        }} 
+                        disabled={updateBotMutation.isPending || !testEmail}
+                        data-testid="button-send-test-email"
+                      >
                         Send Test
                       </Button>
                     </div>

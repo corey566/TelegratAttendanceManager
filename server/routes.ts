@@ -67,14 +67,17 @@ export async function registerRoutes(
     // Test email if requested
     if (req.body.testEmail) {
       try {
+        console.log(`Sending test email to ${req.body.testEmail}...`);
         await sendMail({
           to: req.body.testEmail,
           subject: "BreakTime - SMTP Test",
           text: "If you are receiving this, your SMTP configuration is correct!",
           html: "<h3>BreakTime - SMTP Test</h3><p>If you are receiving this, your SMTP configuration is correct!</p>"
         });
-      } catch (e) {
+      } catch (e: any) {
         console.error("Test email failed:", e);
+        // We don't want to fail the whole settings update if just the test email fails,
+        // but we should probably log it well.
       }
     }
     
