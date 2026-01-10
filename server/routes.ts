@@ -236,6 +236,97 @@ export async function registerRoutes(
 
   // === Telegram Bot Integration ===
   const botInstance = await setupBot();
+
+  // Scheduled Reports logic
+  const scheduleReports = async () => {
+    const settings = await storage.getBotSettings();
+    if (!settings || !settings.reportSchedule || (!settings.reportEmails?.length && !settings.reportTelegramIds?.length)) {
+      return;
+    }
+
+    console.log(`Setting up scheduled reports with cron: ${settings.reportSchedule}`);
+    
+    cron.schedule(settings.reportSchedule!, async () => {
+      console.log("Running scheduled report generation...");
+      try {
+        const now = new Date();
+        let startDate: Date;
+        
+        // Logic to determine the period based on common cron patterns
+        // Default to last 7 days if it's a weekly-looking cron (contains a day of week or is run once a week)
+        const schedule = settings.reportSchedule!;
+        if (schedule.split(' ').length >= 5) {
+          const parts = schedule.split(' ');
+          // If it's something like "0 9 * * 6" (Saturday at 9 AM)
+          if (parts[4] !== '*' || parts[2] === '1') {
+             startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          } else if (parts[3] !== '*') {
+             // Monthly
+             startDate = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+          } else {
+             // Daily
+             startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+          }
+        } else {
+          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        }
+
+        const breaks = await storage.getBreaks({ startDate, endDate: now });
+        if (breaks.length === 0) {
+          console.log("No break data for the report period.");
+          return;
+        }
+
+        const data = breaks.map(b => ({
+          ID: b.id,
+          User: b.userId, // Simplified for the report
+          Type: b.type,
+          Date: b.date,
+          StartTime: formatInTimeZone(b.startTime, 'Asia/Colombo', "yyyy-MM-dd HH:mm:ss"),
+          EndTime: b.endTime ? formatInTimeZone(b.endTime, 'Asia/Colombo', "yyyy-MM-dd HH:mm:ss") : "Active",
+          DurationMinutes: b.duration
+        }));
+
+        const wb = xlsx.utils.book_new();
+        const ws = xlsx.utils.json_to_sheet(data);
+        xlsx.utils.book_append_sheet(wb, ws, "Breaks");
+        const buf = xlsx.write(wb, { type: "buffer", bookType: "xlsx" });
+
+        const filename = `report_${format(startDate, "yyyyMMdd")}_to_${format(now, "yyyyMMdd")}.xlsx`;
+
+        // Send to Telegram
+        if (settings.reportTelegramIds && botInstance) {
+          for (const tid of settings.reportTelegramIds) {
+            try {
+              await botInstance.sendDocument(tid, buf, { caption: `📊 Scheduled Break Report (${format(startDate, "MMM d")} - ${format(now, "MMM d")})` }, { filename, contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+            } catch (e) {
+              console.error(`Failed to send scheduled report to Telegram user ${tid}:`, e);
+            }
+          }
+        }
+
+        // Send to Email
+        if (settings.reportEmails) {
+          for (const email of settings.reportEmails) {
+            try {
+              await sendMail({
+                to: email,
+                subject: `BreakTime Scheduled Report: ${format(startDate, "MMM d")} - ${format(now, "MMM d")}`,
+                text: `Please find attached the scheduled break report for the period ${format(startDate, "yyyy-MM-dd")} to ${format(now, "yyyy-MM-dd")}.`,
+                attachments: [{ filename, content: buf }]
+              });
+            } catch (e) {
+              console.error(`Failed to send scheduled report to email ${email}:`, e);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Scheduled report error:", error);
+      }
+    });
+  };
+
+  scheduleReports();
   
   // Cron for notifications
   cron.schedule('* * * * *', async () => {
