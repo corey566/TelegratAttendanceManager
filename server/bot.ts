@@ -10,10 +10,21 @@ let bot: TelegramBot | null = null;
 export async function getBotUpdates() {
   if (!bot) return [];
   try {
+    // Look back at least for the last 24 hours of updates
+    // offset: -1 fetches updates that haven't been confirmed yet
     const updates = await bot.getUpdates({ limit: 100, allowed_updates: ["message", "my_chat_member"] });
+    
+    // Track processed update IDs if possible or rely on the fact that handleMessage
+    // is idempotent for the same message content/timestamp/user
     for (const update of updates) {
       if (update.message) {
-        await handleMessage(update.message);
+        // Only process messages from the last 24 hours
+        const messageDate = new Date(update.message.date * 1000);
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        
+        if (messageDate > twentyFourHoursAgo) {
+          await handleMessage(update.message);
+        }
       }
       if (update.my_chat_member) {
         const chat = update.my_chat_member.chat;
@@ -36,10 +47,55 @@ export async function getBotUpdates() {
 }
 
 async function handleMessage(msg: TelegramBot.Message) {
-  if (!msg.chat || !msg.chat.id) return;
+  if (!msg.chat || !msg.chat.id || !msg.text) return;
 
   const chatId = msg.chat.id.toString();
   const telegramId = msg.from?.id.toString();
+  if (!telegramId) return;
+
+  // Track if this message was a command
+  const match = msg.text.match(/^\/(.+)/);
+  if (match) {
+    const rawInput = match[1];
+    const command = rawInput.split('@')[0].trim().toLowerCase();
+    
+    const category = await storage.getBreakCategoryByCommand(command);
+    if (category) {
+      const user = await storage.getUserByTelegramId(telegramId);
+      const dbUser = user || await storage.createUser({
+        telegramId,
+        username: msg.from?.username,
+        fullName: `${msg.from?.first_name || ""} ${msg.from?.last_name || ""}`.trim(),
+        isActive: true,
+        isAdmin: false,
+        country: "Unknown"
+      });
+
+      // Use the actual message date for the record
+      const messageDate = new Date(msg.date * 1000);
+
+      if (command === category.startCommand) {
+        const activeBreak = await storage.getActiveBreak(dbUser.id);
+        if (!activeBreak) {
+          await storage.createBreak({
+            userId: dbUser.id,
+            categoryId: category.id,
+            type: category.name,
+            startTime: messageDate,
+            date: formatInTimeZone(messageDate, 'Asia/Colombo', "yyyy-MM-dd")
+          });
+          bot?.sendMessage(chatId, `@${msg.from?.username || msg.from?.first_name}, recorded your ${category.name} start at ${formatInTimeZone(messageDate, 'Asia/Colombo', "HH:mm:ss")}.`);
+        }
+      } else if (command === category.endCommand) {
+        const activeBreak = await storage.getActiveBreak(dbUser.id);
+        if (activeBreak && activeBreak.categoryId === category.id) {
+          const duration = Math.round((messageDate.getTime() - activeBreak.startTime.getTime()) / 60000);
+          await storage.endBreak(activeBreak.id, messageDate, duration);
+          bot?.sendMessage(chatId, `@${msg.from?.username || msg.from?.first_name}, recorded your ${category.name} end at ${formatInTimeZone(messageDate, 'Asia/Colombo', "HH:mm:ss")}. Duration: ${duration}m.`);
+        }
+      }
+    }
+  }
 
   let title = msg.chat.title;
   if (msg.chat.type === "private") {
@@ -55,14 +111,8 @@ async function handleMessage(msg: TelegramBot.Message) {
         title: title || "Untitled Chat",
         isActive: true
       });
-      console.log(`Added new group: ${title || chatId}`);
     } catch (e: any) {
-      // In case of race condition or duplicate key error
-      if (e.code === '23505') {
-        console.log(`Group ${chatId} already exists (handled race condition)`);
-      } else {
-        console.error(`Failed to add group ${chatId}:`, e);
-      }
+      if (e.code !== '23505') console.error(`Failed to add group ${chatId}:`, e);
     }
   } else if (title && existingGroup.title !== title) {
     await storage.updateGroup(chatId, { title: title });
@@ -92,6 +142,9 @@ export async function setupBot() {
   });
 
   bot.on("message", handleMessage);
+
+  // Call getBotUpdates on startup to catch up on missed messages
+  getBotUpdates();
 
   const syncCommands = async () => {
     const categories = await storage.getBreakCategories();
