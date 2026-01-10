@@ -11,15 +11,14 @@ export default function Dashboard() {
   const { data: stats, isLoading: statsLoading } = useStatsSummary('daily');
   const { data: activeBreaks, isLoading: activeLoading } = useActiveBreaks();
 
-  // Mock chart data for visualization since real data might be sparse initially
-  const chartData = [
-    { name: "Mon", breaks: 12 },
-    { name: "Tue", breaks: 19 },
-    { name: "Wed", breaks: 15 },
-    { name: "Thu", breaks: 22 },
-    { name: "Fri", breaks: 18 },
-    { name: "Sat", breaks: 5 },
-    { name: "Sun", breaks: 2 },
+  const chartData = stats?.weeklyActivity || [
+    { name: "Mon", breaks: 0 },
+    { name: "Tue", breaks: 0 },
+    { name: "Wed", breaks: 0 },
+    { name: "Thu", breaks: 0 },
+    { name: "Fri", breaks: 0 },
+    { name: "Sat", breaks: 0 },
+    { name: "Sun", breaks: 0 },
   ];
 
   if (statsLoading || activeLoading) {

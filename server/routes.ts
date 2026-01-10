@@ -162,11 +162,27 @@ export async function registerRoutes(
 
     const totalDuration = breaks.reduce((acc, curr) => acc + (curr.duration || 0), 0);
 
+    // Calculate weekly activity
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const now = new Date();
+    const weeklyActivity = days.map((day, index) => {
+      const count = breaks.filter(b => {
+        const breakDate = new Date(b.startTime);
+        return breakDate.getDay() === index && 
+               (now.getTime() - breakDate.getTime()) <= 7 * 24 * 60 * 60 * 1000;
+      }).length;
+      return { name: day, breaks: count };
+    });
+
+    // Reorder to start from Monday
+    const mondayFirst = [...weeklyActivity.slice(1), weeklyActivity[0]];
+
     res.json({
       totalBreaks: breaks.length,
       totalDuration,
       activeUsers: users.length,
-      onBreak: activeBreaks.length
+      onBreak: activeBreaks.length,
+      weeklyActivity: mondayFirst
     });
   });
 
