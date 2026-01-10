@@ -68,17 +68,37 @@ export async function registerRoutes(
     // Test email if requested
     if (req.body.testEmail) {
       try {
-        console.log(`Sending test email to ${req.body.testEmail}...`);
+        console.log(`Sending test email with report to ${req.body.testEmail}...`);
+        
+        const now = new Date();
+        const startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); // Default to last 7 days for test
+        const breaks = await storage.getBreaks({ startDate, endDate: now });
+        
+        const data = breaks.map(b => ({
+          ID: b.id,
+          User: b.userId,
+          Type: b.type,
+          Date: b.date,
+          StartTime: formatInTimeZone(b.startTime, 'Asia/Colombo', "yyyy-MM-dd HH:mm:ss"),
+          EndTime: b.endTime ? formatInTimeZone(b.endTime, 'Asia/Colombo', "yyyy-MM-dd HH:mm:ss") : "Active",
+          DurationMinutes: b.duration
+        }));
+
+        const wb = xlsx.utils.book_new();
+        const ws = xlsx.utils.json_to_sheet(data);
+        xlsx.utils.book_append_sheet(wb, ws, "Breaks");
+        const buf = xlsx.write(wb, { type: "buffer", bookType: "xlsx" });
+        const filename = `test_report_${format(now, "yyyyMMdd")}.xlsx`;
+
         await sendMail({
           to: req.body.testEmail,
-          subject: "BreakTime - SMTP Test",
-          text: "If you are receiving this, your SMTP configuration is correct!",
-          html: "<h3>BreakTime - SMTP Test</h3><p>If you are receiving this, your SMTP configuration is correct!</p>"
+          subject: "BreakTime - SMTP Test with Report",
+          text: "If you are receiving this, your SMTP configuration is correct and report generation is working!",
+          html: "<h3>BreakTime - SMTP Test</h3><p>Your SMTP configuration is correct and a sample report is attached.</p>",
+          attachments: [{ filename, content: buf }]
         });
       } catch (e: any) {
         console.error("Test email failed:", e);
-        // We don't want to fail the whole settings update if just the test email fails,
-        // but we should probably log it well.
       }
     }
     
