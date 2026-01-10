@@ -22,6 +22,7 @@ export default function Settings() {
   const [endCommand, setEndCommand] = useState("");
   const [duration, setDuration] = useState("");
   const [notificationTime, setNotificationTime] = useState("");
+  const [categoryCountry, setCategoryCountry] = useState("");
 
   // Bot Settings State
   const [botToken, setBotToken] = useState("");
@@ -68,6 +69,7 @@ export default function Settings() {
       setEndCommand("");
       setDuration("");
       setNotificationTime("");
+      setCategoryCountry("");
       toast({ title: "Success", description: "Break category created" });
     },
     onError: (error: any) => {
@@ -146,6 +148,7 @@ export default function Settings() {
       endCommand,
       duration: parseInt(duration),
       notificationTime: notificationTime || undefined,
+      country: categoryCountry || undefined,
     });
   };
 
@@ -212,6 +215,10 @@ export default function Settings() {
                       </Label>
                       <Input placeholder="e.g. 13:00" value={notificationTime} onChange={(e) => setNotificationTime(e.target.value)} />
                     </div>
+                    <div className="space-y-2">
+                      <Label>Country (for Timezone)</Label>
+                      <Input placeholder="e.g. Sri Lanka" value={categoryCountry} onChange={(e) => setCategoryCountry(e.target.value)} />
+                    </div>
                     <Button type="submit" className="w-full" disabled={createCategoryMutation.isPending}>
                       <Plus className="w-4 h-4 mr-2" />
                       Create Category
@@ -234,6 +241,7 @@ export default function Settings() {
                           <TableHead>Name</TableHead>
                           <TableHead>Commands</TableHead>
                           <TableHead>Duration</TableHead>
+                          <TableHead>Country</TableHead>
                           <TableHead>Notify</TableHead>
                           <TableHead>Active</TableHead>
                           <TableHead className="text-right">Actions</TableHead>
@@ -250,6 +258,7 @@ export default function Settings() {
                               </div>
                             </TableCell>
                             <TableCell>{cat.duration}m</TableCell>
+                            <TableCell>{cat.country || "Not Set"}</TableCell>
                             <TableCell>{cat.notificationTime || "None"}</TableCell>
                             <TableCell>
                               <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${cat.isActive ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
