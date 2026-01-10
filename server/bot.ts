@@ -81,7 +81,15 @@ export async function setupBot() {
   if (bot) return bot;
 
   console.log("Starting Telegram bot...");
-  bot = new TelegramBot(token, { polling: true });
+  bot = new TelegramBot(token, { polling: { interval: 2000, params: { timeout: 10 } } });
+
+  bot.on("polling_error", (error: any) => {
+    if (error.message.includes("409 Conflict")) {
+      console.log("Polling conflict detected. This is likely due to another instance running. The bot will continue to retry.");
+    } else {
+      console.error("Polling error:", error.message);
+    }
+  });
 
   bot.on("message", handleMessage);
 
