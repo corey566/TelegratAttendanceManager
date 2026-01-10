@@ -63,6 +63,17 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  if (process.env.NODE_ENV === "production" || process.env.REPL_ID) {
+    log("Ensuring database schema is up to date...");
+    try {
+      const { execSync } = await import("child_process");
+      execSync("npx drizzle-kit push", { stdio: "inherit" });
+      log("Schema push completed successfully.");
+    } catch (error) {
+      log(`Schema push failed: ${error}`, "error");
+    }
+  }
+
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
