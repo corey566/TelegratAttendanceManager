@@ -73,10 +73,12 @@ export async function registerRoutes(
         const now = new Date();
         const startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); // Default to last 7 days for test
         const breaks = await storage.getBreaks({ startDate, endDate: now });
+        const users = await storage.getAllUsers();
+        const userMap = new Map(users.map(u => [u.id, u.fullName || u.username || `User ${u.id}`]));
         
         const data = breaks.map(b => ({
           ID: b.id,
-          User: b.userId,
+          User: userMap.get(b.userId) || b.userId,
           Type: b.type,
           Date: b.date,
           StartTime: formatInTimeZone(b.startTime, 'Asia/Colombo', "yyyy-MM-dd HH:mm:ss"),
@@ -297,9 +299,12 @@ export async function registerRoutes(
           return;
         }
 
+        const users = await storage.getAllUsers();
+        const userMap = new Map(users.map(u => [u.id, u.fullName || u.username || `User ${u.id}`]));
+
         const data = breaks.map(b => ({
           ID: b.id,
-          User: b.userId, // Simplified for the report
+          User: userMap.get(b.userId) || b.userId,
           Type: b.type,
           Date: b.date,
           StartTime: formatInTimeZone(b.startTime, 'Asia/Colombo', "yyyy-MM-dd HH:mm:ss"),
