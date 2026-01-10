@@ -7,7 +7,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { api } from "@shared/routes";
 
 export default function ReportsPage() {
-  const [dateFilter, setDateFilter] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [dateFilter, setDateFilter] = useState(formatInTimeZone(new Date(), 'Asia/Colombo', "yyyy-MM-dd"));
   const { data: breaks, isLoading } = useBreaks({ date: dateFilter });
 
   const handleExport = () => {
@@ -67,7 +67,7 @@ export default function ReportsPage() {
               </div>
               <h3 className="font-bold text-lg text-foreground">No records found</h3>
               <p className="text-muted-foreground text-sm mt-1 max-w-sm">
-                No break activity recorded for {format(new Date(dateFilter), "MMMM do, yyyy")}. Try selecting a different date.
+                No break activity recorded for {formatInTimeZone(new Date(dateFilter), 'Asia/Colombo', "MMMM do, yyyy")}. Try selecting a different date.
               </p>
             </div>
           ) : (
