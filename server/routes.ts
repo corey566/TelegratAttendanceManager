@@ -65,6 +65,12 @@ export async function registerRoutes(
   app.post("/api/settings/bot", requireAuth, async (req, res) => {
     const settings = await storage.updateBotSettings(req.body);
     
+    // Trigger catch-up if requested
+    if (req.body.triggerCatchup) {
+      console.log("Triggering manual bot catch-up...");
+      import("./bot").then(m => m.getBotUpdates()).catch(err => console.error("Manual catch-up failed:", err));
+    }
+    
     // Test email if requested
     if (req.body.testEmail) {
       try {

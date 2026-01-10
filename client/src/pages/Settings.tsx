@@ -382,6 +382,25 @@ export default function Settings() {
                     Save Configuration
                   </Button>
                 </form>
+
+                <div className="pt-6 mt-6 border-t">
+                  <h3 className="text-lg font-medium mb-4">Manual Bot Operations</h3>
+                  <div className="flex flex-col gap-4">
+                    <div className="flex items-center gap-4">
+                      <Button
+                        variant="outline"
+                        onClick={() => updateBotMutation.mutate({ triggerCatchup: true })}
+                        disabled={updateBotMutation.isPending}
+                      >
+                        <RefreshCw className={`mr-2 h-4 h-4 ${updateBotMutation.isPending ? "animate-spin" : ""}`} />
+                        Trigger Bot Catch-up
+                      </Button>
+                      <p className="text-sm text-muted-foreground">
+                        Force the bot to process missed commands from the last 24 hours.
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

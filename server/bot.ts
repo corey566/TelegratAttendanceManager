@@ -10,20 +10,29 @@ let bot: TelegramBot | null = null;
 export async function getBotUpdates() {
   if (!bot) return [];
   try {
-    // Look back at least for the last 24 hours of updates
-    // offset: -1 fetches updates that haven't been confirmed yet
-    const updates = await bot.getUpdates({ limit: 100, allowed_updates: ["message", "my_chat_member"] });
+    // telegramId -> lastMessageDate to prevent multiple processing in one loop
+    const processedMessages = new Set<string>();
+
+    // We get updates and confirm them by using an offset that clears processed ones
+    // But since we want to catch up, we look at the last 100 updates without confirming immediately
+    const updates = await bot.getUpdates({ limit: 100, timeout: 0, allowed_updates: ["message", "my_chat_member"] });
     
-    // Track processed update IDs if possible or rely on the fact that handleMessage
-    // is idempotent for the same message content/timestamp/user
+    console.log(`Catching up: found ${updates.length} updates`);
+
     for (const update of updates) {
       if (update.message) {
-        // Only process messages from the last 24 hours
-        const messageDate = new Date(update.message.date * 1000);
+        const msg = update.message;
+        const msgId = `${msg.chat.id}:${msg.message_id}`;
+        
+        if (processedMessages.has(msgId)) continue;
+        processedMessages.add(msgId);
+
+        const messageDate = new Date(msg.date * 1000);
         const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
         
         if (messageDate > twentyFourHoursAgo) {
-          await handleMessage(update.message);
+          console.log(`Processing missed message ${msgId} from ${messageDate.toISOString()}`);
+          await handleMessage(msg);
         }
       }
       if (update.my_chat_member) {
@@ -39,9 +48,16 @@ export async function getBotUpdates() {
         }
       }
     }
+    
+    // After processing, confirm the updates by getting updates with offset of last update + 1
+    if (updates.length > 0) {
+      const lastUpdateId = updates[updates.length - 1].update_id;
+      await bot.getUpdates({ offset: lastUpdateId + 1, limit: 1 });
+    }
+    
     return updates;
   } catch (error) {
-    console.error("Error fetching updates:", error);
+    console.error("Error catching up on missed updates:", error);
     return [];
   }
 }
@@ -53,7 +69,6 @@ async function handleMessage(msg: TelegramBot.Message) {
   const telegramId = msg.from?.id.toString();
   if (!telegramId) return;
 
-  // Track if this message was a command
   const match = msg.text.match(/^\/(.+)/);
   if (match) {
     const rawInput = match[1];
@@ -61,42 +76,52 @@ async function handleMessage(msg: TelegramBot.Message) {
     
     const category = await storage.getBreakCategoryByCommand(command);
     if (category) {
-      const user = await storage.getUserByTelegramId(telegramId);
-      const dbUser = user || await storage.createUser({
-        telegramId,
-        username: msg.from?.username,
-        fullName: `${msg.from?.first_name || ""} ${msg.from?.last_name || ""}`.trim(),
-        isActive: true,
-        isAdmin: false,
-        country: "Unknown"
-      });
+      console.log(`Handling command /${command} for user ${telegramId} at ${new Date(msg.date * 1000).toISOString()}`);
+      
+      let user = await storage.getUserByTelegramId(telegramId);
+      if (!user) {
+        user = await storage.createUser({
+          telegramId,
+          username: msg.from?.username,
+          fullName: `${msg.from?.first_name || ""} ${msg.from?.last_name || ""}`.trim(),
+          isActive: true,
+          isAdmin: false,
+          country: "Unknown"
+        });
+        console.log(`Auto-registered user ${telegramId} during catch-up`);
+      }
 
-      // Use the actual message date for the record
       const messageDate = new Date(msg.date * 1000);
 
       if (command === category.startCommand) {
-        const activeBreak = await storage.getActiveBreak(dbUser.id);
+        const activeBreak = await storage.getActiveBreak(user.id);
         if (!activeBreak) {
           await storage.createBreak({
-            userId: dbUser.id,
+            userId: user.id,
             categoryId: category.id,
             type: category.name,
             startTime: messageDate,
             date: formatInTimeZone(messageDate, 'Asia/Colombo', "yyyy-MM-dd")
           });
+          console.log(`Recorded START for user ${user.id} at ${messageDate.toISOString()}`);
           bot?.sendMessage(chatId, `@${msg.from?.username || msg.from?.first_name}, recorded your ${category.name} start at ${formatInTimeZone(messageDate, 'Asia/Colombo', "HH:mm:ss")}.`);
+        } else {
+          console.log(`User ${user.id} already has an active break ${activeBreak.id}`);
         }
       } else if (command === category.endCommand) {
-        const activeBreak = await storage.getActiveBreak(dbUser.id);
+        const activeBreak = await storage.getActiveBreak(user.id);
         if (activeBreak && activeBreak.categoryId === category.id) {
           const duration = Math.round((messageDate.getTime() - activeBreak.startTime.getTime()) / 60000);
           await storage.endBreak(activeBreak.id, messageDate, duration);
+          console.log(`Recorded END for user ${user.id} at ${messageDate.toISOString()}, duration ${duration}m`);
           bot?.sendMessage(chatId, `@${msg.from?.username || msg.from?.first_name}, recorded your ${category.name} end at ${formatInTimeZone(messageDate, 'Asia/Colombo', "HH:mm:ss")}. Duration: ${duration}m.`);
+        } else {
+          console.log(`No active ${category.name} break found for user ${user.id} to end`);
         }
       }
     }
   }
-
+  // ... existing group update logic ...
   let title = msg.chat.title;
   if (msg.chat.type === "private") {
     title = msg.from?.username || msg.from?.first_name || `User ${telegramId}`;
@@ -131,7 +156,8 @@ export async function setupBot() {
   if (bot) return bot;
 
   console.log("Starting Telegram bot...");
-  bot = new TelegramBot(token, { polling: { interval: 2000, params: { timeout: 10 } } });
+  // Start with polling disabled to catch up first
+  bot = new TelegramBot(token, { polling: false });
 
   bot.on("polling_error", (error: any) => {
     if (error.message.includes("409 Conflict")) {
@@ -143,8 +169,20 @@ export async function setupBot() {
 
   bot.on("message", handleMessage);
 
-  // Call getBotUpdates on startup to catch up on missed messages
-  getBotUpdates();
+  // Catch up on missed messages before starting polling
+  try {
+    // Only catch up if we are in production or explicitly asked
+    if (process.env.NODE_ENV === "production" || process.env.BOT_CATCHUP === "true") {
+      await getBotUpdates();
+      console.log("Catch up completed. Starting polling...");
+    }
+    // @ts-ignore - bot is definitely TelegramBot
+    bot.startPolling({ interval: 2000, params: { timeout: 10 } });
+  } catch (err) {
+    console.error("Failed during catch up, starting polling anyway:", err);
+    // @ts-ignore
+    bot.startPolling({ interval: 2000, params: { timeout: 10 } });
+  }
 
   const syncCommands = async () => {
     const categories = await storage.getBreakCategories();
