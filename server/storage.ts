@@ -100,15 +100,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getBreakCategoryByCommand(command: string): Promise<BreakCategory | undefined> {
-    const [category] = await db.select()
+    const categories = await db.select()
       .from(breakCategories)
-      .where(and(eq(breakCategories.isActive, true), eq(breakCategories.startCommand, command)));
-    if (category) return category;
-
-    const [endCategory] = await db.select()
-      .from(breakCategories)
-      .where(and(eq(breakCategories.isActive, true), eq(breakCategories.endCommand, command)));
-    return endCategory;
+      .where(eq(breakCategories.isActive, true));
+    
+    return categories.find(c => 
+      c.startCommand.toLowerCase() === command.toLowerCase() || 
+      c.endCommand.toLowerCase() === command.toLowerCase()
+    );
   }
 
   async createBreakCategory(category: InsertBreakCategory): Promise<BreakCategory> {

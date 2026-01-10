@@ -29,6 +29,7 @@ export default function Settings() {
   const [emails, setEmails] = useState("");
   const [telegramIds, setTelegramIds] = useState("");
   const [reportSchedule, setReportSchedule] = useState("");
+  const [testEmail, setTestEmail] = useState("");
 
   const { data: categories, isLoading: loadingCategories } = useQuery<any[]>({
     queryKey: [api.settings.categories.list.path],
@@ -159,7 +160,9 @@ export default function Settings() {
       reportEmails: emails.split(",").map(e => e.trim()).filter(Boolean),
       reportTelegramIds: telegramIds.split(",").map(id => id.trim()).filter(Boolean),
       reportSchedule,
+      testEmail: testEmail || undefined,
     });
+    setTestEmail("");
   };
 
   return (
@@ -342,6 +345,20 @@ export default function Settings() {
                       onChange={(e) => setReportSchedule(e.target.value)} 
                     />
                     <p className="text-xs text-muted-foreground">Example: 0 9 * * * (Daily at 9 AM)</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Test SMTP Connection (Send Test Email to:)</Label>
+                    <div className="flex gap-2">
+                      <Input 
+                        placeholder="your-email@example.com" 
+                        value={testEmail} 
+                        onChange={(e) => setTestEmail(e.target.value)} 
+                      />
+                      <Button type="button" variant="outline" onClick={handleBotSubmit} disabled={updateBotMutation.isPending || !testEmail}>
+                        Send Test
+                      </Button>
+                    </div>
                   </div>
 
                   <Button type="submit" disabled={updateBotMutation.isPending}>

@@ -5,6 +5,7 @@ import { api } from "@shared/routes";
 import { z } from "zod";
 import * as xlsx from "xlsx";
 import { setupBot, processUpdate, getBotUpdates } from "./bot";
+import { sendMail } from "./mail";
 import session from "express-session";
 import MemoryStoreFactory from "memorystore";
 import cron from "node-cron";
@@ -62,6 +63,21 @@ export async function registerRoutes(
 
   app.post("/api/settings/bot", requireAuth, async (req, res) => {
     const settings = await storage.updateBotSettings(req.body);
+    
+    // Test email if requested
+    if (req.body.testEmail) {
+      try {
+        await sendMail({
+          to: req.body.testEmail,
+          subject: "BreakTime - SMTP Test",
+          text: "If you are receiving this, your SMTP configuration is correct!",
+          html: "<h3>BreakTime - SMTP Test</h3><p>If you are receiving this, your SMTP configuration is correct!</p>"
+        });
+      } catch (e) {
+        console.error("Test email failed:", e);
+      }
+    }
+    
     res.json(settings);
   });
 

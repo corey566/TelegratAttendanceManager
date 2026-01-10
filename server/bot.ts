@@ -2,20 +2,17 @@ import TelegramBot from "node-telegram-bot-api";
 import { storage } from "./storage";
 import { format } from "date-fns";
 
+// Use proper types for the bot
 let bot: TelegramBot | null = null;
 
 export async function getBotUpdates() {
   if (!bot) return [];
   try {
-    // According to Telegram Bot API documentation, getUpdates returns an array of Update objects.
-    // Each update contains a message, which we use to identify the chat (group/private).
-    // We use a higher limit to ensure we catch recent interactions if the bot was offline.
     const updates = await bot.getUpdates({ limit: 100, allowed_updates: ["message", "my_chat_member"] });
     for (const update of updates) {
       if (update.message) {
         await handleMessage(update.message);
       }
-      // Handle being added to a group specifically
       if (update.my_chat_member) {
         const chat = update.my_chat_member.chat;
         const chatId = chat.id.toString();
@@ -42,7 +39,6 @@ async function handleMessage(msg: TelegramBot.Message) {
   const chatId = msg.chat.id.toString();
   const telegramId = msg.from?.id.toString();
 
-  // If it's a private chat, try to use username or first_name for the "group" title
   let title = msg.chat.title;
   if (msg.chat.type === "private") {
     title = msg.from?.username || msg.from?.first_name || `User ${telegramId}`;
@@ -77,7 +73,6 @@ export async function setupBot() {
 
   bot.on("message", handleMessage);
 
-  // Sync bot commands with Telegram
   const syncCommands = async () => {
     const categories = await storage.getBreakCategories();
     const commands = categories
@@ -100,18 +95,15 @@ export async function setupBot() {
   (bot as any).syncCommands = syncCommands;
   syncCommands();
 
-  bot.onText(/\/(.+)/, async (msg, match) => {
+  bot.onText(/\/(.+)/, async (msg: TelegramBot.Message, match: RegExpExecArray | null) => {
     const chatId = msg.chat.id.toString();
     const rawInput = match?.[1] || "";
-    // Handle commands with bot username suffix (e.g., /startlunch@botname)
     const command = rawInput.split('@')[0].trim().toLowerCase();
     
     if (!command) return;
 
-    // Log for debugging
     console.log(`Processing command /${command} (raw: ${rawInput}) from user ${msg.from?.id} in chat ${chatId}`);
 
-    // Check if group is active - log for debugging
     const groupsList = await storage.getGroups();
     const activeGroup = groupsList.find(g => g.chatId === chatId);
     
@@ -135,14 +127,13 @@ export async function setupBot() {
 
     const user = await storage.getUserByTelegramId(telegramId);
     if (!user) {
-      // Auto-register user if not exists
       await storage.createUser({
         telegramId,
         username: msg.from?.username,
         fullName: `${msg.from?.first_name || ""} ${msg.from?.last_name || ""}`.trim(),
         isActive: true,
         isAdmin: false,
-        country: "Unknown" // Default country
+        country: "Unknown"
       });
       console.log(`Auto-registered new user: ${msg.from?.username || telegramId}`);
     }
