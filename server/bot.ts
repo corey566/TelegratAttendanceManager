@@ -102,19 +102,26 @@ export async function setupBot() {
 
   bot.onText(/\/(.+)/, async (msg, match) => {
     const chatId = msg.chat.id.toString();
-    const rawCommand = (match?.[1] || "").split('@')[0].trim().toLowerCase();
-    const command = rawCommand;
+    const rawInput = match?.[1] || "";
+    // Handle commands with bot username suffix (e.g., /startlunch@botname)
+    const command = rawInput.split('@')[0].trim().toLowerCase();
+    
     if (!command) return;
 
     // Log for debugging
-    console.log(`Processing command /${command} (raw: ${match?.[1]}) from user ${msg.from?.id} in chat ${chatId}`);
+    console.log(`Processing command /${command} (raw: ${rawInput}) from user ${msg.from?.id} in chat ${chatId}`);
 
-    // Check if group is active
-    const groups = await storage.getGroups();
-    const group = groups.find(g => g.chatId === chatId);
-    if (group && !group.isActive) {
-      console.log(`Group ${chatId} is inactive, ignoring command.`);
+    // Check if group is active - log for debugging
+    const groupsList = await storage.getGroups();
+    const activeGroup = groupsList.find(g => g.chatId === chatId);
+    
+    if (activeGroup && !activeGroup.isActive) {
+      console.log(`Group ${chatId} is inactive, ignoring command /${command}.`);
       return;
+    }
+
+    if (!activeGroup) {
+      console.log(`Group ${chatId} ("${msg.chat.title || 'Private'}") not found in database.`);
     }
 
     const telegramId = msg.from?.id.toString();

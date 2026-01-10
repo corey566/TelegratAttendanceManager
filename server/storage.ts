@@ -96,7 +96,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getBreakCategories(): Promise<BreakCategory[]> {
-    return await db.select().from(breakCategories);
+    return await db.select().from(breakCategories).orderBy(breakCategories.name);
   }
 
   async getBreakCategoryByCommand(command: string): Promise<BreakCategory | undefined> {
