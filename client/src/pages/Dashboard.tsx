@@ -120,7 +120,7 @@ export default function Dashboard() {
                     {item.userId}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm truncate">User #{item.userId}</p>
+                    <p className="font-semibold text-sm truncate">{item.user?.fullName || item.user?.username || `User #${item.userId}`}</p>
                     <p className="text-xs text-muted-foreground truncate">
                       Started {formatInTimeZone(new Date(item.startTime), 'Asia/Colombo', "h:mm a")} • {item.type}
                     </p>

@@ -159,6 +159,15 @@ export async function setupBot() {
       });
 
       bot?.sendMessage(chatId, `@${msg.from?.username || msg.from?.first_name}, started your ${category.name}. Limit: ${category.duration}m.`);
+      
+      // Setup reminder for limit
+      const reminderTimeout = category.duration * 60 * 1000;
+      setTimeout(async () => {
+        const currentBreak = await storage.getActiveBreak(dbUser.id);
+        if (currentBreak && currentBreak.categoryId === category.id) {
+          bot?.sendMessage(dbUser.telegramId, `⚠️ Reminder: Your ${category.name} limit of ${category.duration}m is being reached. Please remember to end your break!`);
+        }
+      }, reminderTimeout);
     } else if (command === category.endCommand) {
       const activeBreak = await storage.getActiveBreak(dbUser.id);
       if (!activeBreak || activeBreak.categoryId !== category.id) {

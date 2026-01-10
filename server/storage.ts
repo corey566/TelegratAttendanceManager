@@ -91,8 +91,13 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(breaks.startTime));
   }
 
-  async getAllActiveBreaks(): Promise<Break[]> {
-    return await db.select().from(breaks).where(isNull(breaks.endTime));
+  async getAllActiveBreaks(): Promise<(Break & { user?: User })[]> {
+    const activeBreaks = await db.select().from(breaks).where(isNull(breaks.endTime));
+    const breaksWithUsers = await Promise.all(activeBreaks.map(async (b) => {
+      const user = await this.getUser(b.userId);
+      return { ...b, user };
+    }));
+    return breaksWithUsers;
   }
 
   async getBreakCategories(): Promise<BreakCategory[]> {
