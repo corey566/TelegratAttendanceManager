@@ -2,16 +2,19 @@ import { format } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
 import { Layout } from "@/components/Layout";
 import { StatCard } from "@/components/StatCard";
-import { useStatsSummary } from "@/hooks/use-stats";
 import { useActiveBreaks } from "@/hooks/use-breaks";
 import { Users, Clock, Coffee, AlertCircle } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@shared/routes";
 
 export default function Dashboard() {
-  const { data: stats, isLoading: statsLoading } = useStatsSummary('daily');
+  const { data: stats, isLoading: statsLoading } = useQuery<any>({
+    queryKey: [api.stats.summary.path, 'daily'],
+  });
   const { data: activeBreaks, isLoading: activeLoading } = useActiveBreaks();
 
-  const chartData = stats?.weeklyActivity || [
+  const chartData = (stats as any)?.weeklyActivity || [
     { name: "Mon", breaks: 0 },
     { name: "Tue", breaks: 0 },
     { name: "Wed", breaks: 0 },
@@ -93,7 +96,7 @@ export default function Dashboard() {
                   }}
                 />
                 <Bar dataKey="breaks" radius={[6, 6, 0, 0]}>
-                  {chartData.map((_, index) => (
+                  {chartData.map((_item: any, index: number) => (
                     <Cell key={`cell-${index}`} fill={index % 2 === 0 ? 'hsl(var(--primary))' : 'hsl(var(--primary)/0.7)'} />
                   ))}
                 </Bar>
