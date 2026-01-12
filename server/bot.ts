@@ -9,6 +9,15 @@ let bot: TelegramBot | null = null;
 
 export async function getBotUpdates() {
   if (!bot) return [];
+  
+  // Stop polling if active to avoid 409 Conflict
+  const wasPolling = (bot as any).isPolling();
+  if (wasPolling) {
+    await bot.stopPolling();
+    // Wait a bit for Telegram to register the stop
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  }
+
   try {
     // telegramId -> lastMessageDate to prevent multiple processing in one loop
     const processedMessages = new Set<string>();
@@ -49,16 +58,25 @@ export async function getBotUpdates() {
       }
     }
     
-    // After processing, confirm the updates by getting updates with offset of last update + 1
-    if (updates.length > 0) {
-      const lastUpdateId = updates[updates.length - 1].update_id;
-      await bot.getUpdates({ offset: lastUpdateId + 1, limit: 1 });
-    }
+      // After processing, confirm the updates by getting updates with offset of last update + 1
+      if (updates.length > 0) {
+        const lastUpdateId = updates[updates.length - 1].update_id;
+        // Check if lastUpdateId is a safe integer and valid
+        if (Number.isSafeInteger(lastUpdateId)) {
+          await bot.getUpdates({ offset: lastUpdateId + 1, limit: 1, timeout: 0 });
+        }
+      }
     
     return updates;
   } catch (error) {
     console.error("Error catching up on missed updates:", error);
     return [];
+  } finally {
+    // Restart polling if it was active
+    if (wasPolling && bot) {
+      // @ts-ignore
+      bot.startPolling({ interval: 2000, params: { timeout: 10 } });
+    }
   }
 }
 
@@ -78,6 +96,14 @@ async function handleMessage(msg: TelegramBot.Message) {
     if (category) {
       console.log(`Handling command /${command} for user ${telegramId} at ${new Date(msg.date * 1000).toISOString()}`);
       
+      const groupsList = await storage.getGroups();
+      const activeGroup = groupsList.find(g => g.chatId === chatId);
+      
+      if (activeGroup && !activeGroup.isActive) {
+        console.log(`Group ${chatId} is inactive, ignoring command /${command}.`);
+        return;
+      }
+
       let user = await storage.getUserByTelegramId(telegramId);
       if (!user) {
         user = await storage.createUser({
