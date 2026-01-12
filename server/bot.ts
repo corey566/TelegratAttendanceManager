@@ -93,7 +93,7 @@ async function handleMessage(msg: TelegramBot.Message) {
 
       const messageDate = new Date(msg.date * 1000);
 
-      if (command === category.startCommand) {
+      if (command.toLowerCase() === category.startCommand.toLowerCase()) {
         const activeBreak = await storage.getActiveBreak(user.id);
         if (!activeBreak) {
           await storage.createBreak({
@@ -108,7 +108,7 @@ async function handleMessage(msg: TelegramBot.Message) {
         } else {
           console.log(`User ${user.id} already has an active break ${activeBreak.id}`);
         }
-      } else if (command === category.endCommand) {
+      } else if (command.toLowerCase() === category.endCommand.toLowerCase()) {
         const activeBreak = await storage.getActiveBreak(user.id);
         if (activeBreak && activeBreak.categoryId === category.id) {
           const duration = Math.round((messageDate.getTime() - activeBreak.startTime.getTime()) / 60000);
@@ -252,7 +252,7 @@ export async function setupBot() {
     const dbUser = await storage.getUserByTelegramId(telegramId);
     if (!dbUser) return;
 
-    if (command === category.startCommand) {
+    if (command === category.startCommand.toLowerCase()) {
       const activeBreak = await storage.getActiveBreak(dbUser.id);
       if (activeBreak) {
         bot?.sendMessage(chatId, `@${msg.from?.username || msg.from?.first_name}, you are already on a break!`);
@@ -279,7 +279,7 @@ export async function setupBot() {
           bot?.sendMessage(dbUser.telegramId, `⚠️ Reminder (${nowLanka}): Your ${category.name} limit of ${category.duration}m is being reached. Please remember to end your break!`);
         }
       }, reminderTimeout);
-    } else if (command === category.endCommand) {
+    } else if (command === category.endCommand.toLowerCase()) {
       const activeBreak = await storage.getActiveBreak(dbUser.id);
       if (!activeBreak || activeBreak.categoryId !== category.id) {
         bot?.sendMessage(chatId, `@${msg.from?.username || msg.from?.first_name}, you haven't started this break type!`);
