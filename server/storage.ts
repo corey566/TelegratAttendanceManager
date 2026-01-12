@@ -139,10 +139,13 @@ export class DatabaseStorage implements IStorage {
   async updateBotSettings(updates: Partial<BotSettings>): Promise<BotSettings> {
     const existing = await this.getBotSettings();
     if (existing) {
-      const [updated] = await db.update(botSettings).set(updates).where(eq(botSettings.id, existing.id)).returning();
+      // Remove triggerCatchup and testEmail before updating the database
+      const { triggerCatchup, testEmail, ...dbUpdates } = updates as any;
+      const [updated] = await db.update(botSettings).set(dbUpdates).where(eq(botSettings.id, existing.id)).returning();
       return updated;
     } else {
-      const [inserted] = await db.insert(botSettings).values(updates as any).returning();
+      const { triggerCatchup, testEmail, ...dbUpdates } = updates as any;
+      const [inserted] = await db.insert(botSettings).values(dbUpdates).returning();
       return inserted;
     }
   }
