@@ -13,17 +13,18 @@ export async function getBotUpdates() {
   // Stop polling if active to avoid 409 Conflict
   const wasPolling = (bot as any).isPolling();
   if (wasPolling) {
-    await bot.stopPolling();
-    // Wait a bit for Telegram to register the stop
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    try {
+      await bot.stopPolling();
+      // Wait a bit for Telegram to register the stop
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    } catch (e) {
+      console.error("Error stopping polling:", e);
+    }
   }
 
   try {
-    // telegramId -> lastMessageDate to prevent multiple processing in one loop
     const processedMessages = new Set<string>();
 
-    // We get updates and confirm them by using an offset that clears processed ones
-    // But since we want to catch up, we look at the last 100 updates without confirming immediately
     const updates = await bot.getUpdates({ limit: 100, timeout: 0, allowed_updates: ["message", "my_chat_member"] });
     
     console.log(`Catching up: found ${updates.length} updates`);
@@ -40,7 +41,7 @@ export async function getBotUpdates() {
         const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
         
         if (messageDate > twentyFourHoursAgo) {
-          console.log(`Processing missed message ${msgId} from ${messageDate.toISOString()}`);
+          console.log(`Processing missed message ${msgId} from ${messageDate.toISOString()}: ${msg.text}`);
           await handleMessage(msg);
         }
       }
@@ -58,24 +59,25 @@ export async function getBotUpdates() {
       }
     }
     
-      // After processing, confirm the updates by getting updates with offset of last update + 1
-      if (updates.length > 0) {
-        const lastUpdateId = updates[updates.length - 1].update_id;
-        // Check if lastUpdateId is a safe integer and valid
-        if (Number.isSafeInteger(lastUpdateId)) {
-          await bot.getUpdates({ offset: lastUpdateId + 1, limit: 1, timeout: 0 });
-        }
+    if (updates.length > 0) {
+      const lastUpdateId = updates[updates.length - 1].update_id;
+      if (Number.isSafeInteger(lastUpdateId)) {
+        await bot.getUpdates({ offset: lastUpdateId + 1, limit: 1, timeout: 0 });
       }
+    }
     
     return updates;
   } catch (error) {
     console.error("Error catching up on missed updates:", error);
     return [];
   } finally {
-    // Restart polling if it was active
     if (wasPolling && bot) {
-      // @ts-ignore
-      bot.startPolling({ interval: 2000, params: { timeout: 10 } });
+      try {
+        // @ts-ignore
+        await bot.startPolling({ interval: 2000, params: { timeout: 10 } });
+      } catch (e) {
+        console.error("Error restarting polling:", e);
+      }
     }
   }
 }
@@ -87,86 +89,76 @@ async function handleMessage(msg: TelegramBot.Message) {
   const telegramId = msg.from?.id.toString();
   if (!telegramId) return;
 
+  // Check if it's a command first
   const match = msg.text.match(/^\/(.+)/);
-  if (match) {
-    const rawInput = match[1];
-    const command = rawInput.split('@')[0].trim().toLowerCase();
-    
-    const category = await storage.getBreakCategoryByCommand(command);
-    if (category) {
-      console.log(`Handling command /${command} for user ${telegramId} at ${new Date(msg.date * 1000).toISOString()}`);
-      
-      const groupsList = await storage.getGroups();
-      const activeGroup = groupsList.find(g => g.chatId === chatId);
-      
-      if (activeGroup && !activeGroup.isActive) {
-        console.log(`Group ${chatId} is inactive, ignoring command /${command}.`);
-        return;
-      }
+  if (!match) return;
 
-      let user = await storage.getUserByTelegramId(telegramId);
-      if (!user) {
-        user = await storage.createUser({
-          telegramId,
-          username: msg.from?.username,
-          fullName: `${msg.from?.first_name || ""} ${msg.from?.last_name || ""}`.trim(),
-          isActive: true,
-          isAdmin: false,
-          country: "Unknown"
-        });
-        console.log(`Auto-registered user ${telegramId} during catch-up`);
-      }
-
-      const messageDate = new Date(msg.date * 1000);
-
-      if (command.toLowerCase() === category.startCommand.toLowerCase()) {
-        const activeBreak = await storage.getActiveBreak(user.id);
-        if (!activeBreak) {
-          await storage.createBreak({
-            userId: user.id,
-            categoryId: category.id,
-            type: category.name,
-            startTime: messageDate,
-            date: formatInTimeZone(messageDate, 'Asia/Colombo', "yyyy-MM-dd")
-          });
-          console.log(`Recorded START for user ${user.id} at ${messageDate.toISOString()}`);
-          bot?.sendMessage(chatId, `@${msg.from?.username || msg.from?.first_name}, recorded your ${category.name} start at ${formatInTimeZone(messageDate, 'Asia/Colombo', "HH:mm:ss")}.`);
-        } else {
-          console.log(`User ${user.id} already has an active break ${activeBreak.id}`);
-        }
-      } else if (command.toLowerCase() === category.endCommand.toLowerCase()) {
-        const activeBreak = await storage.getActiveBreak(user.id);
-        if (activeBreak && activeBreak.categoryId === category.id) {
-          const duration = Math.round((messageDate.getTime() - activeBreak.startTime.getTime()) / 60000);
-          await storage.endBreak(activeBreak.id, messageDate, duration);
-          console.log(`Recorded END for user ${user.id} at ${messageDate.toISOString()}, duration ${duration}m`);
-          bot?.sendMessage(chatId, `@${msg.from?.username || msg.from?.first_name}, recorded your ${category.name} end at ${formatInTimeZone(messageDate, 'Asia/Colombo', "HH:mm:ss")}. Duration: ${duration}m.`);
-        } else {
-          console.log(`No active ${category.name} break found for user ${user.id} to end`);
-        }
-      }
-    }
-  }
-  // ... existing group update logic ...
-  let title = msg.chat.title;
-  if (msg.chat.type === "private") {
-    title = msg.from?.username || msg.from?.first_name || `User ${telegramId}`;
-  }
-
-  const existingGroup = await storage.getGroupById(chatId);
+  const rawInput = match[1];
+  const command = rawInput.split('@')[0].trim().toLowerCase();
   
-  if (!existingGroup) {
+  const category = await storage.getBreakCategoryByCommand(command);
+  if (!category) return;
+
+  const groupsList = await storage.getGroups();
+  const activeGroup = groupsList.find(g => g.chatId === chatId);
+  
+  // Auto-activate group if it's new during catch-up, or if it's private
+  if (!activeGroup) {
     try {
       await storage.addGroup({
         chatId: chatId,
-        title: title || "Untitled Chat",
+        title: msg.chat.title || msg.from?.username || `Chat: ${chatId}`,
         isActive: true
       });
-    } catch (e: any) {
-      if (e.code !== '23505') console.error(`Failed to add group ${chatId}:`, e);
+      console.log(`Auto-added and activated group ${chatId} during command processing`);
+    } catch (e) {}
+  } else if (!activeGroup.isActive) {
+    console.log(`Group ${chatId} is inactive, ignoring command /${command}.`);
+    return;
+  }
+
+  console.log(`Handling command /${command} for user ${telegramId} at ${new Date(msg.date * 1000).toISOString()}`);
+  
+  let user = await storage.getUserByTelegramId(telegramId);
+  if (!user) {
+    user = await storage.createUser({
+      telegramId,
+      username: msg.from?.username,
+      fullName: `${msg.from?.first_name || ""} ${msg.from?.last_name || ""}`.trim(),
+      isActive: true,
+      isAdmin: false,
+      country: "Unknown"
+    });
+    console.log(`Auto-registered user ${telegramId} during processing`);
+  }
+
+  const messageDate = new Date(msg.date * 1000);
+
+  if (command === category.startCommand.toLowerCase()) {
+    const activeBreak = await storage.getActiveBreak(user.id);
+    if (!activeBreak) {
+      await storage.createBreak({
+        userId: user.id,
+        categoryId: category.id,
+        type: category.name,
+        startTime: messageDate,
+        date: formatInTimeZone(messageDate, 'Asia/Colombo', "yyyy-MM-dd")
+      });
+      console.log(`Recorded START for user ${user.id} at ${messageDate.toISOString()}`);
+      bot?.sendMessage(chatId, `@${msg.from?.username || msg.from?.first_name}, recorded your ${category.name} start at ${formatInTimeZone(messageDate, 'Asia/Colombo', "HH:mm:ss")}.`);
+    } else {
+      console.log(`User ${user.id} already has an active break ${activeBreak.id}`);
     }
-  } else if (title && existingGroup.title !== title) {
-    await storage.updateGroup(chatId, { title: title });
+  } else if (command === category.endCommand.toLowerCase()) {
+    const activeBreak = await storage.getActiveBreak(user.id);
+    if (activeBreak && activeBreak.categoryId === category.id) {
+      const duration = Math.round((messageDate.getTime() - activeBreak.startTime.getTime()) / 60000);
+      await storage.endBreak(activeBreak.id, messageDate, duration);
+      console.log(`Recorded END for user ${user.id} at ${messageDate.toISOString()}, duration ${duration}m`);
+      bot?.sendMessage(chatId, `@${msg.from?.username || msg.from?.first_name}, recorded your ${category.name} end at ${formatInTimeZone(messageDate, 'Asia/Colombo', "HH:mm:ss")}. Duration: ${duration}m.`);
+    } else {
+      console.log(`No active ${category.name} break found for user ${user.id} to end`);
+    }
   }
 }
 
@@ -182,7 +174,6 @@ export async function setupBot() {
   if (bot) return bot;
 
   console.log("Starting Telegram bot...");
-  // Start with polling disabled to catch up first
   bot = new TelegramBot(token, { polling: false });
 
   bot.on("polling_error", (error: any) => {
@@ -195,14 +186,12 @@ export async function setupBot() {
 
   bot.on("message", handleMessage);
 
-  // Catch up on missed messages before starting polling
   try {
-    // Only catch up if we are in production or explicitly asked
     if (process.env.NODE_ENV === "production" || process.env.BOT_CATCHUP === "true") {
       await getBotUpdates();
       console.log("Catch up completed. Starting polling...");
     }
-    // @ts-ignore - bot is definitely TelegramBot
+    // @ts-ignore
     bot.startPolling({ interval: 2000, params: { timeout: 10 } });
   } catch (err) {
     console.error("Failed during catch up, starting polling anyway:", err);
@@ -231,98 +220,6 @@ export async function setupBot() {
 
   (bot as any).syncCommands = syncCommands;
   syncCommands();
-
-  bot.onText(/\/(.+)/, async (msg: TelegramBot.Message, match: RegExpExecArray | null) => {
-    const chatId = msg.chat.id.toString();
-    const rawInput = match?.[1] || "";
-    const command = rawInput.split('@')[0].trim().toLowerCase();
-    
-    if (!command) return;
-
-    console.log(`Processing command /${command} (raw: ${rawInput}) from user ${msg.from?.id} in chat ${chatId}`);
-
-    const groupsList = await storage.getGroups();
-    const activeGroup = groupsList.find(g => g.chatId === chatId);
-    
-    if (activeGroup && !activeGroup.isActive) {
-      console.log(`Group ${chatId} is inactive, ignoring command /${command}.`);
-      return;
-    }
-
-    if (!activeGroup) {
-      console.log(`Group ${chatId} ("${msg.chat.title || 'Private'}") not found in database.`);
-    }
-
-    const telegramId = msg.from?.id.toString();
-    if (!telegramId) return;
-
-    const category = await storage.getBreakCategoryByCommand(command);
-    if (!category) {
-      console.log(`Command /${command} not recognized as a break category.`);
-      return;
-    }
-
-    const user = await storage.getUserByTelegramId(telegramId);
-    if (!user) {
-      await storage.createUser({
-        telegramId,
-        username: msg.from?.username,
-        fullName: `${msg.from?.first_name || ""} ${msg.from?.last_name || ""}`.trim(),
-        isActive: true,
-        isAdmin: false,
-        country: "Unknown"
-      });
-      console.log(`Auto-registered new user: ${msg.from?.username || telegramId}`);
-    }
-
-    const dbUser = await storage.getUserByTelegramId(telegramId);
-    if (!dbUser) return;
-
-    if (command === category.startCommand.toLowerCase()) {
-      const activeBreak = await storage.getActiveBreak(dbUser.id);
-      if (activeBreak) {
-        bot?.sendMessage(chatId, `@${msg.from?.username || msg.from?.first_name}, you are already on a break!`);
-        return;
-      }
-
-      await storage.createBreak({
-        userId: dbUser.id,
-        categoryId: category.id,
-        type: category.name,
-        startTime: new Date(),
-        date: formatInTimeZone(new Date(), 'Asia/Colombo', "yyyy-MM-dd")
-      });
-
-      bot?.sendMessage(chatId, `@${msg.from?.username || msg.from?.first_name}, started your ${category.name}. Limit: ${category.duration}m.`);
-      
-      // Setup reminder for limit
-      const reminderTimeout = category.duration * 60 * 1000;
-      setTimeout(async () => {
-        const currentBreak = await storage.getActiveBreak(dbUser.id);
-        if (currentBreak && currentBreak.categoryId === category.id) {
-          // Send reminder in Sri Lanka time context
-          const nowLanka = formatInTimeZone(new Date(), 'Asia/Colombo', "HH:mm:ss");
-          bot?.sendMessage(dbUser.telegramId, `⚠️ Reminder (${nowLanka}): Your ${category.name} limit of ${category.duration}m is being reached. Please remember to end your break!`);
-        }
-      }, reminderTimeout);
-    } else if (command === category.endCommand.toLowerCase()) {
-      const activeBreak = await storage.getActiveBreak(dbUser.id);
-      if (!activeBreak || activeBreak.categoryId !== category.id) {
-        bot?.sendMessage(chatId, `@${msg.from?.username || msg.from?.first_name}, you haven't started this break type!`);
-        return;
-      }
-
-      const endTime = new Date();
-      const duration = Math.round((endTime.getTime() - activeBreak.startTime.getTime()) / 60000);
-      await storage.endBreak(activeBreak.id, endTime, duration);
-
-      let message = `@${msg.from?.username || msg.from?.first_name}, ended your ${category.name}. Duration: ${duration}m.`;
-      if (duration > category.duration) {
-        message += `\n⚠️ Warning: You exceeded the ${category.duration}m limit by ${duration - category.duration}m!`;
-      }
-      bot?.sendMessage(chatId, message);
-    }
-  });
 
   return bot;
 }
