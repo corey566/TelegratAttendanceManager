@@ -177,10 +177,23 @@ export async function getBotUpdates() {
   }
 }
 
-async function performStart(chatId: string, user: { id: number }, category: { id: number; name: string }, when: Date, displayName: string, isPrivate: boolean) {
+async function refreshKeyboard(chatId: string, userId: number, displayName: string, isPrivate: boolean, replyToMessageId?: number) {
+  const { reply_keyboard_rows } = await buildBreakKeyboard(userId);
+  // In groups, selective reply keyboards only show to users that are @mentioned
+  // OR to the sender of a message we're replying to. We do BOTH for reliability.
+  const text = isPrivate ? "Updated ✅" : `${displayName} — your buttons are updated ✅`;
+  await safeSend(chatId, text, {
+    reply_markup: buildReplyKeyboardMarkup(reply_keyboard_rows, !isPrivate),
+    reply_to_message_id: !isPrivate ? replyToMessageId : undefined,
+  });
+}
+
+async function performStart(chatId: string, user: { id: number }, category: { id: number; name: string }, when: Date, displayName: string, isPrivate: boolean, replyToMessageId?: number) {
   const activeBreak = await storage.getActiveBreak(user.id);
   if (activeBreak) {
-    await safeSend(chatId, `${displayName}, you already have an active break.`);
+    await safeSend(chatId, `${displayName}, you already have an active break.`, {
+      reply_to_message_id: !isPrivate ? replyToMessageId : undefined,
+    });
     return;
   }
   await storage.createBreak({
@@ -190,23 +203,26 @@ async function performStart(chatId: string, user: { id: number }, category: { id
     startTime: when,
     date: formatInTimeZone(when, TZ, "yyyy-MM-dd"),
   });
-  await safeSend(chatId, `✅ ${displayName} started ${category.name} at ${formatInTimeZone(when, TZ, "HH:mm:ss")} (Sri Lanka time).`);
-  // Refresh persistent keyboard to flip Start→End for that category.
-  const { reply_keyboard_rows } = await buildBreakKeyboard(user.id);
-  await safeSend(chatId, "Updated:", { reply_markup: buildReplyKeyboardMarkup(reply_keyboard_rows, !isPrivate) });
+  await safeSend(chatId, `✅ ${displayName} started ${category.name} at ${formatInTimeZone(when, TZ, "HH:mm:ss")} (Sri Lanka time).`, {
+    reply_to_message_id: !isPrivate ? replyToMessageId : undefined,
+  });
+  await refreshKeyboard(chatId, user.id, displayName, isPrivate, replyToMessageId);
 }
 
-async function performEnd(chatId: string, user: { id: number }, category: { id: number; name: string }, when: Date, displayName: string, isPrivate: boolean) {
+async function performEnd(chatId: string, user: { id: number }, category: { id: number; name: string }, when: Date, displayName: string, isPrivate: boolean, replyToMessageId?: number) {
   const activeBreak = await storage.getActiveBreak(user.id);
   if (!activeBreak || activeBreak.categoryId !== category.id) {
-    await safeSend(chatId, `${displayName}, no active ${category.name} found.`);
+    await safeSend(chatId, `${displayName}, no active ${category.name} found.`, {
+      reply_to_message_id: !isPrivate ? replyToMessageId : undefined,
+    });
     return;
   }
   const duration = Math.round((when.getTime() - activeBreak.startTime.getTime()) / 60000);
   await storage.endBreak(activeBreak.id, when, duration);
-  await safeSend(chatId, `✅ ${displayName} ended ${category.name} at ${formatInTimeZone(when, TZ, "HH:mm:ss")}. Duration: ${duration} min.`);
-  const { reply_keyboard_rows } = await buildBreakKeyboard(user.id);
-  await safeSend(chatId, "Updated:", { reply_markup: buildReplyKeyboardMarkup(reply_keyboard_rows, !isPrivate) });
+  await safeSend(chatId, `✅ ${displayName} ended ${category.name} at ${formatInTimeZone(when, TZ, "HH:mm:ss")}. Duration: ${duration} min.`, {
+    reply_to_message_id: !isPrivate ? replyToMessageId : undefined,
+  });
+  await refreshKeyboard(chatId, user.id, displayName, isPrivate, replyToMessageId);
 }
 
 async function handleMessage(msg: TelegramBot.Message) {
@@ -268,9 +284,9 @@ async function handleMessage(msg: TelegramBot.Message) {
       return;
     }
     if (parsed.action === "start") {
-      await performStart(chatId, user, category, messageDate, displayName, isPrivate);
+      await performStart(chatId, user, category, messageDate, displayName, isPrivate, msg.message_id);
     } else {
-      await performEnd(chatId, user, category, messageDate, displayName, isPrivate);
+      await performEnd(chatId, user, category, messageDate, displayName, isPrivate, msg.message_id);
     }
     return;
   }
