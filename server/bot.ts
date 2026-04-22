@@ -20,6 +20,7 @@ async function buildBreakKeyboard(userId: number) {
   const activeCategories = categories.filter(c => c.isActive);
   const activeBreak = await storage.getActiveBreak(userId);
 
+  // Inline keyboard (used as fallback / refresh)
   const inline_keyboard = activeCategories.map(cat => {
     const isCurrentActive = activeBreak?.categoryId === cat.id;
     return [
@@ -30,7 +31,33 @@ async function buildBreakKeyboard(userId: number) {
     ];
   });
 
-  return { inline_keyboard, hasCategories: activeCategories.length > 0, activeBreak };
+  // Persistent reply keyboard (bottom of chat, like a custom keypad)
+  // Lay out 2 buttons per row to match the requested look.
+  const buttons = activeCategories.map(cat => {
+    const isCurrentActive = activeBreak?.categoryId === cat.id;
+    return { text: isCurrentActive ? `🔴 End ${cat.name}` : `🟢 Start ${cat.name}` };
+  });
+  const reply_keyboard_rows: { text: string }[][] = [];
+  for (let i = 0; i < buttons.length; i += 2) {
+    reply_keyboard_rows.push(buttons.slice(i, i + 2));
+  }
+
+  return {
+    inline_keyboard,
+    reply_keyboard_rows,
+    hasCategories: activeCategories.length > 0,
+    activeBreak,
+    activeCategories,
+  };
+}
+
+function buildReplyKeyboardMarkup(rows: { text: string }[][], selective: boolean) {
+  return {
+    keyboard: rows,
+    resize_keyboard: true,
+    is_persistent: true,
+    selective,
+  };
 }
 
 async function ensureUser(from: TelegramBot.User) {
@@ -49,14 +76,28 @@ async function ensureUser(from: TelegramBot.User) {
   return user;
 }
 
-async function sendBreakMenu(chatId: string | number, userId: number, headerText?: string) {
-  const { inline_keyboard, hasCategories } = await buildBreakKeyboard(userId);
+async function sendBreakMenu(
+  chatId: string | number,
+  userId: number,
+  opts: { isPrivate: boolean; replyToMessageId?: number; headerText?: string } = { isPrivate: true }
+) {
+  const { reply_keyboard_rows, hasCategories } = await buildBreakKeyboard(userId);
   if (!hasCategories) {
     return safeSend(chatId, "No break categories configured. Please contact your administrator.");
   }
-  return safeSend(chatId, headerText || "👇 Tap a button to start or end a break:", {
-    reply_markup: { inline_keyboard },
+  // In groups, target the keyboard at the user who triggered it.
+  const selective = !opts.isPrivate;
+  return safeSend(chatId, opts.headerText || "👇 Use the buttons below to manage your break:", {
+    reply_markup: buildReplyKeyboardMarkup(reply_keyboard_rows, selective),
+    reply_to_message_id: opts.replyToMessageId,
   });
+}
+
+function parseBreakButton(text: string): { action: "start" | "end"; categoryName: string } | null {
+  // Matches "🟢 Start <Name>" or "🔴 End <Name>" (emoji optional, case-insensitive)
+  const m = text.trim().match(/^(?:🟢\s*|🔴\s*)?(start|end)\s+(.+?)$/i);
+  if (!m) return null;
+  return { action: m[1].toLowerCase() as "start" | "end", categoryName: m[2].trim() };
 }
 
 export async function getBotUpdates() {
@@ -136,8 +177,41 @@ export async function getBotUpdates() {
   }
 }
 
+async function performStart(chatId: string, user: { id: number }, category: { id: number; name: string }, when: Date, displayName: string, isPrivate: boolean) {
+  const activeBreak = await storage.getActiveBreak(user.id);
+  if (activeBreak) {
+    await safeSend(chatId, `${displayName}, you already have an active break.`);
+    return;
+  }
+  await storage.createBreak({
+    userId: user.id,
+    categoryId: category.id,
+    type: category.name,
+    startTime: when,
+    date: formatInTimeZone(when, TZ, "yyyy-MM-dd"),
+  });
+  await safeSend(chatId, `✅ ${displayName} started ${category.name} at ${formatInTimeZone(when, TZ, "HH:mm:ss")} (Sri Lanka time).`);
+  // Refresh persistent keyboard to flip Start→End for that category.
+  const { reply_keyboard_rows } = await buildBreakKeyboard(user.id);
+  await safeSend(chatId, "Updated:", { reply_markup: buildReplyKeyboardMarkup(reply_keyboard_rows, !isPrivate) });
+}
+
+async function performEnd(chatId: string, user: { id: number }, category: { id: number; name: string }, when: Date, displayName: string, isPrivate: boolean) {
+  const activeBreak = await storage.getActiveBreak(user.id);
+  if (!activeBreak || activeBreak.categoryId !== category.id) {
+    await safeSend(chatId, `${displayName}, no active ${category.name} found.`);
+    return;
+  }
+  const duration = Math.round((when.getTime() - activeBreak.startTime.getTime()) / 60000);
+  await storage.endBreak(activeBreak.id, when, duration);
+  await safeSend(chatId, `✅ ${displayName} ended ${category.name} at ${formatInTimeZone(when, TZ, "HH:mm:ss")}. Duration: ${duration} min.`);
+  const { reply_keyboard_rows } = await buildBreakKeyboard(user.id);
+  await safeSend(chatId, "Updated:", { reply_markup: buildReplyKeyboardMarkup(reply_keyboard_rows, !isPrivate) });
+}
+
 async function handleMessage(msg: TelegramBot.Message) {
   if (!msg.chat || !msg.chat.id || !msg.from) return;
+  if (msg.from.is_bot) return;
 
   const chatId = msg.chat.id.toString();
   const isPrivate = msg.chat.type === "private";
@@ -159,13 +233,14 @@ async function handleMessage(msg: TelegramBot.Message) {
   }
 
   const user = await ensureUser(msg.from);
-
-  // Strip @botname suffix and lowercase
   const rawText = (msg.text || "").trim();
-  const normalized = rawText.split("@")[0].trim().toLowerCase();
+  if (!rawText) return;
 
-  // In private chat, ANY message shows the buttons (buttons-first UX).
-  // In group chat, only /start, /help, /break, or break-related commands trigger.
+  const normalized = rawText.split("@")[0].trim().toLowerCase();
+  const messageDate = new Date(msg.date * 1000);
+  const displayName = msg.from.username ? `@${msg.from.username}` : (msg.from.first_name || "User");
+
+  // 1) Menu trigger commands
   const isMenuTrigger =
     normalized === "/start" ||
     normalized === "/help" ||
@@ -174,53 +249,51 @@ async function handleMessage(msg: TelegramBot.Message) {
     normalized === "menu" ||
     normalized === "/menu";
 
-  if (isMenuTrigger || (isPrivate && !normalized.startsWith("/"))) {
-    await sendBreakMenu(chatId, user.id, "👋 Welcome to BreakTime! Tap a button below to manage your break:");
+  if (isMenuTrigger) {
+    await sendBreakMenu(chatId, user.id, {
+      isPrivate,
+      replyToMessageId: !isPrivate ? msg.message_id : undefined,
+      headerText: "👋 Welcome to BreakTime! Use the buttons below to manage your break:",
+    });
     return;
   }
 
-  // Legacy command support (e.g., /tea, /lunch typed in groups)
+  // 2) Reply-keyboard button taps come in as plain text like "🟢 Start Tea Break"
+  const parsed = parseBreakButton(rawText);
+  if (parsed) {
+    const categories = (await storage.getBreakCategories()).filter(c => c.isActive);
+    const category = categories.find(c => c.name.toLowerCase() === parsed.categoryName.toLowerCase());
+    if (!category) {
+      await safeSend(chatId, `Unknown break: "${parsed.categoryName}".`);
+      return;
+    }
+    if (parsed.action === "start") {
+      await performStart(chatId, user, category, messageDate, displayName, isPrivate);
+    } else {
+      await performEnd(chatId, user, category, messageDate, displayName, isPrivate);
+    }
+    return;
+  }
+
+  // 3) Legacy slash command support (e.g., /tea, /endtea)
   const match = rawText.match(/^\/(.+)/);
   if (!match) {
-    if (isPrivate) {
-      await sendBreakMenu(chatId, user.id);
-    }
+    // In private chat, any other text re-shows the menu so users always see buttons.
+    if (isPrivate) await sendBreakMenu(chatId, user.id, { isPrivate: true });
     return;
   }
 
   const command = match[1].split("@")[0].trim().toLowerCase();
   const category = await storage.getBreakCategoryByCommand(command);
   if (!category) {
-    if (isPrivate) await sendBreakMenu(chatId, user.id);
+    if (isPrivate) await sendBreakMenu(chatId, user.id, { isPrivate: true });
     return;
   }
 
-  const messageDate = new Date(msg.date * 1000);
-  const displayName = msg.from.username ? `@${msg.from.username}` : (msg.from.first_name || "User");
-
   if (command === category.startCommand.toLowerCase()) {
-    const activeBreak = await storage.getActiveBreak(user.id);
-    if (activeBreak) {
-      await safeSend(chatId, `${displayName}, you already have an active break.`);
-      return;
-    }
-    await storage.createBreak({
-      userId: user.id,
-      categoryId: category.id,
-      type: category.name,
-      startTime: messageDate,
-      date: formatInTimeZone(messageDate, TZ, "yyyy-MM-dd"),
-    });
-    await safeSend(chatId, `✅ ${displayName}, ${category.name} started at ${formatInTimeZone(messageDate, TZ, "HH:mm:ss")} (Sri Lanka time).`);
+    await performStart(chatId, user, category, messageDate, displayName, isPrivate);
   } else if (command === category.endCommand.toLowerCase()) {
-    const activeBreak = await storage.getActiveBreak(user.id);
-    if (activeBreak && activeBreak.categoryId === category.id) {
-      const duration = Math.round((messageDate.getTime() - activeBreak.startTime.getTime()) / 60000);
-      await storage.endBreak(activeBreak.id, messageDate, duration);
-      await safeSend(chatId, `✅ ${displayName}, ${category.name} ended at ${formatInTimeZone(messageDate, TZ, "HH:mm:ss")}. Duration: ${duration} min.`);
-    } else {
-      await safeSend(chatId, `${displayName}, no active ${category.name} found.`);
-    }
+    await performEnd(chatId, user, category, messageDate, displayName, isPrivate);
   }
 }
 
@@ -269,18 +342,10 @@ async function handleCallbackQuery(query: TelegramBot.CallbackQuery) {
     }
   }
 
-  // Refresh keyboard on the original message
-  try {
-    const { inline_keyboard } = await buildBreakKeyboard(user.id);
-    await bot?.editMessageReplyMarkup(
-      { inline_keyboard },
-      { chat_id: chatId, message_id: query.message.message_id }
-    );
-  } catch (e: any) {
-    if (!String(e?.message || "").includes("message is not modified")) {
-      console.error("Failed to refresh keyboard:", e?.message || e);
-    }
-  }
+  // Re-send the persistent reply keyboard so it reflects the new state
+  const isPrivate = query.message.chat.type === "private";
+  const { reply_keyboard_rows } = await buildBreakKeyboard(user.id);
+  await safeSend(chatId, "Updated:", { reply_markup: buildReplyKeyboardMarkup(reply_keyboard_rows, !isPrivate) });
 }
 
 export async function setupBot() {
