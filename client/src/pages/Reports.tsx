@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Layout } from "@/components/Layout";
 import { useBreaks } from "@/hooks/use-breaks";
+import { useUsers } from "@/hooks/use-users";
 import { FileDown, Calendar as CalendarIcon, Filter, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
@@ -9,6 +10,18 @@ import { api } from "@shared/routes";
 export default function ReportsPage() {
   const [dateFilter, setDateFilter] = useState(formatInTimeZone(new Date(), 'Asia/Colombo', "yyyy-MM-dd"));
   const { data: breaks, isLoading } = useBreaks({ date: dateFilter });
+  const { data: users } = useUsers();
+  const userMap = new Map((users || []).map((u: any) => [u.id, u]));
+
+  const displayName = (userId: number) => {
+    const u: any = userMap.get(userId);
+    if (!u) return `User #${userId}`;
+    return u.fullName?.trim() || u.username || `User #${userId}`;
+  };
+  const displayInitial = (userId: number) => {
+    const name = displayName(userId);
+    return name.replace(/[^A-Za-z0-9]/g, "").charAt(0).toUpperCase() || "?";
+  };
 
   const handleExport = () => {
     // Direct browser navigation to trigger download
@@ -92,10 +105,10 @@ export default function ReportsPage() {
                     <tr key={log.id} className="hover:bg-muted/30 transition-colors group">
                       <td className="p-4">
                         <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
-                            {log.userId}
+                          <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs" data-testid={`avatar-user-${log.userId}`}>
+                            {displayInitial(log.userId)}
                           </div>
-                          <span className="font-medium text-sm">User #{log.userId}</span>
+                          <span className="font-medium text-sm" data-testid={`text-username-${log.userId}`}>{displayName(log.userId)}</span>
                         </div>
                       </td>
                       <td className="p-4">

@@ -62,18 +62,42 @@ function buildReplyKeyboardMarkup(rows: { text: string }[][], selective: boolean
 
 async function ensureUser(from: TelegramBot.User) {
   const telegramId = from.id.toString();
+  const fullName = `${from.first_name || ""} ${from.last_name || ""}`.trim() || null;
+  const username = from.username || null;
   let user = await storage.getUserByTelegramId(telegramId);
   if (!user) {
     user = await storage.createUser({
       telegramId,
-      username: from.username,
-      fullName: `${from.first_name || ""} ${from.last_name || ""}`.trim(),
+      username: username || undefined,
+      fullName: fullName || undefined,
       isActive: true,
       isAdmin: false,
       country: "Unknown",
     });
+  } else if ((username && user.username !== username) || (fullName && user.fullName !== fullName)) {
+    // Backfill / refresh user details from latest Telegram info
+    try {
+      user = await storage.updateUser(user.id, {
+        username: username || user.username,
+        fullName: fullName || user.fullName,
+      });
+    } catch (e) {
+      console.error("Failed to refresh user info:", e);
+    }
   }
   return user;
+}
+
+function buildDisplayName(from: TelegramBot.User): string {
+  // Prefer @username (real mention), then full name as text mention, then fallback
+  if (from.username) return `@${from.username}`;
+  const name = `${from.first_name || ""} ${from.last_name || ""}`.trim();
+  if (name) return `<a href="tg://user?id=${from.id}">${escapeHtml(name)}</a>`;
+  return `<a href="tg://user?id=${from.id}">User</a>`;
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 async function sendBreakMenu(
@@ -177,23 +201,28 @@ export async function getBotUpdates() {
   }
 }
 
+function groupReplyOpts(isPrivate: boolean, replyToMessageId?: number) {
+  return {
+    parse_mode: "HTML" as const,
+    reply_to_message_id: !isPrivate ? replyToMessageId : undefined,
+  };
+}
+
 async function refreshKeyboard(chatId: string, userId: number, displayName: string, isPrivate: boolean, replyToMessageId?: number) {
   const { reply_keyboard_rows } = await buildBreakKeyboard(userId);
   // In groups, selective reply keyboards only show to users that are @mentioned
   // OR to the sender of a message we're replying to. We do BOTH for reliability.
   const text = isPrivate ? "Updated ✅" : `${displayName} — your buttons are updated ✅`;
   await safeSend(chatId, text, {
+    ...groupReplyOpts(isPrivate, replyToMessageId),
     reply_markup: buildReplyKeyboardMarkup(reply_keyboard_rows, !isPrivate),
-    reply_to_message_id: !isPrivate ? replyToMessageId : undefined,
   });
 }
 
 async function performStart(chatId: string, user: { id: number }, category: { id: number; name: string }, when: Date, displayName: string, isPrivate: boolean, replyToMessageId?: number) {
   const activeBreak = await storage.getActiveBreak(user.id);
   if (activeBreak) {
-    await safeSend(chatId, `${displayName}, you already have an active break.`, {
-      reply_to_message_id: !isPrivate ? replyToMessageId : undefined,
-    });
+    await safeSend(chatId, `${displayName}, you already have an active break.`, groupReplyOpts(isPrivate, replyToMessageId));
     return;
   }
   await storage.createBreak({
@@ -203,25 +232,19 @@ async function performStart(chatId: string, user: { id: number }, category: { id
     startTime: when,
     date: formatInTimeZone(when, TZ, "yyyy-MM-dd"),
   });
-  await safeSend(chatId, `✅ ${displayName} started ${category.name} at ${formatInTimeZone(when, TZ, "HH:mm:ss")} (Sri Lanka time).`, {
-    reply_to_message_id: !isPrivate ? replyToMessageId : undefined,
-  });
+  await safeSend(chatId, `✅ ${displayName} started ${category.name} at ${formatInTimeZone(when, TZ, "HH:mm:ss")} (Sri Lanka time).`, groupReplyOpts(isPrivate, replyToMessageId));
   await refreshKeyboard(chatId, user.id, displayName, isPrivate, replyToMessageId);
 }
 
 async function performEnd(chatId: string, user: { id: number }, category: { id: number; name: string }, when: Date, displayName: string, isPrivate: boolean, replyToMessageId?: number) {
   const activeBreak = await storage.getActiveBreak(user.id);
   if (!activeBreak || activeBreak.categoryId !== category.id) {
-    await safeSend(chatId, `${displayName}, no active ${category.name} found.`, {
-      reply_to_message_id: !isPrivate ? replyToMessageId : undefined,
-    });
+    await safeSend(chatId, `${displayName}, no active ${category.name} found.`, groupReplyOpts(isPrivate, replyToMessageId));
     return;
   }
   const duration = Math.round((when.getTime() - activeBreak.startTime.getTime()) / 60000);
   await storage.endBreak(activeBreak.id, when, duration);
-  await safeSend(chatId, `✅ ${displayName} ended ${category.name} at ${formatInTimeZone(when, TZ, "HH:mm:ss")}. Duration: ${duration} min.`, {
-    reply_to_message_id: !isPrivate ? replyToMessageId : undefined,
-  });
+  await safeSend(chatId, `✅ ${displayName} ended ${category.name} at ${formatInTimeZone(when, TZ, "HH:mm:ss")}. Duration: ${duration} min.`, groupReplyOpts(isPrivate, replyToMessageId));
   await refreshKeyboard(chatId, user.id, displayName, isPrivate, replyToMessageId);
 }
 
@@ -254,7 +277,7 @@ async function handleMessage(msg: TelegramBot.Message) {
 
   const normalized = rawText.split("@")[0].trim().toLowerCase();
   const messageDate = new Date(msg.date * 1000);
-  const displayName = msg.from.username ? `@${msg.from.username}` : (msg.from.first_name || "User");
+  const displayName = buildDisplayName(msg.from);
 
   // 1) Menu trigger commands
   const isMenuTrigger =
@@ -329,7 +352,7 @@ async function handleCallbackQuery(query: TelegramBot.CallbackQuery) {
   }
 
   const messageDate = new Date();
-  const displayName = query.from.username ? `@${query.from.username}` : (query.from.first_name || "User");
+  const displayName = buildDisplayName(query.from);
 
   if (action === "start") {
     const activeBreak = await storage.getActiveBreak(user.id);
