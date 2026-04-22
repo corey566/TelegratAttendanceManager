@@ -60,6 +60,22 @@ function buildReplyKeyboardMarkup(rows: { text: string }[][], selective: boolean
   };
 }
 
+async function fetchProfilePhotoFileId(telegramUserId: number): Promise<string | null> {
+  if (!bot) return null;
+  try {
+    const photos = await bot.getUserProfilePhotos(telegramUserId, { limit: 1 });
+    if (photos.total_count > 0 && photos.photos[0]?.length) {
+      // Pick the largest size for best quality
+      const sizes = photos.photos[0];
+      const largest = sizes[sizes.length - 1];
+      return largest?.file_id || null;
+    }
+  } catch (e: any) {
+    console.error(`Failed to fetch profile photo for ${telegramUserId}:`, e?.message || e);
+  }
+  return null;
+}
+
 async function ensureUser(from: TelegramBot.User) {
   const telegramId = from.id.toString();
   const fullName = `${from.first_name || ""} ${from.last_name || ""}`.trim() || null;
@@ -85,7 +101,44 @@ async function ensureUser(from: TelegramBot.User) {
       console.error("Failed to refresh user info:", e);
     }
   }
+
+  // Fetch profile photo if missing (one-shot per user; refreshed on demand from API).
+  if (!user.photoFileId) {
+    const fileId = await fetchProfilePhotoFileId(from.id);
+    if (fileId) {
+      try {
+        user = await storage.updateUser(user.id, { photoFileId: fileId });
+      } catch (e) {
+        console.error("Failed to save profile photo file id:", e);
+      }
+    }
+  }
   return user;
+}
+
+export async function getTelegramFileStream(fileId: string): Promise<{ url: string; token: string } | null> {
+  if (!bot) return null;
+  try {
+    const file = await bot.getFile(fileId);
+    if (!file.file_path) return null;
+    // node-telegram-bot-api exposes the token via internal field; reuse env/db value instead
+    const settings = await storage.getBotSettings();
+    const token = settings?.botToken || process.env.BOT_TOKEN || "";
+    return { url: `https://api.telegram.org/file/bot${token}/${file.file_path}`, token };
+  } catch (e: any) {
+    console.error(`Failed to resolve Telegram file ${fileId}:`, e?.message || e);
+    return null;
+  }
+}
+
+export async function refreshUserPhoto(telegramId: string): Promise<string | null> {
+  const user = await storage.getUserByTelegramId(telegramId);
+  if (!user) return null;
+  const fileId = await fetchProfilePhotoFileId(parseInt(telegramId));
+  if (fileId && fileId !== user.photoFileId) {
+    await storage.updateUser(user.id, { photoFileId: fileId });
+  }
+  return fileId;
 }
 
 function buildDisplayName(from: TelegramBot.User): string {

@@ -13,6 +13,7 @@ export const users = pgTable("users", {
   country: text("country"),
   isAdmin: boolean("is_admin").default(false),
   isActive: boolean("is_active").default(true),
+  photoFileId: text("photo_file_id"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import * as xlsx from "xlsx";
-import { setupBot, processUpdate, getBotUpdates } from "./bot";
+import { setupBot, processUpdate, getBotUpdates, getTelegramFileStream, refreshUserPhoto } from "./bot";
 import { sendMail, verifyMailTransport } from "./mail";
 import session from "express-session";
 import MemoryStoreFactory from "memorystore";
@@ -168,6 +168,33 @@ export async function registerRoutes(
     const user = await storage.getUser(Number(req.params.id));
     if (!user) return res.status(404).json({ message: "User not found" });
     res.json(user);
+  });
+
+  // Profile photo proxy: streams the user's Telegram profile photo if available.
+  app.get("/api/users/:id/photo", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(Number(req.params.id));
+      if (!user) return res.status(404).end();
+
+      let fileId = user.photoFileId;
+      if (!fileId && user.telegramId) {
+        fileId = await refreshUserPhoto(user.telegramId);
+      }
+      if (!fileId) return res.status(404).end();
+
+      const file = await getTelegramFileStream(fileId);
+      if (!file) return res.status(404).end();
+
+      const r = await fetch(file.url);
+      if (!r.ok || !r.body) return res.status(404).end();
+      res.setHeader("Content-Type", r.headers.get("content-type") || "image/jpeg");
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      const buf = Buffer.from(await r.arrayBuffer());
+      res.send(buf);
+    } catch (e: any) {
+      console.error("photo proxy error:", e?.message || e);
+      res.status(500).end();
+    }
   });
 
   app.get(api.breaks.list.path, requireAuth, async (req, res) => {

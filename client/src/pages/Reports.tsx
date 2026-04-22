@@ -105,8 +105,14 @@ export default function ReportsPage() {
                     <tr key={log.id} className="hover:bg-muted/30 transition-colors group">
                       <td className="p-4">
                         <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs" data-testid={`avatar-user-${log.userId}`}>
-                            {displayInitial(log.userId)}
+                          <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs overflow-hidden relative" data-testid={`avatar-user-${log.userId}`}>
+                            <span className="absolute inset-0 flex items-center justify-center">{displayInitial(log.userId)}</span>
+                            <img
+                              src={`/api/users/${log.userId}/photo`}
+                              alt=""
+                              className="h-8 w-8 object-cover relative"
+                              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                            />
                           </div>
                           <span className="font-medium text-sm" data-testid={`text-username-${log.userId}`}>{displayName(log.userId)}</span>
                         </div>
