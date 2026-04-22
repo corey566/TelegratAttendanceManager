@@ -5,7 +5,7 @@ import { api } from "@shared/routes";
 import { z } from "zod";
 import * as xlsx from "xlsx";
 import { setupBot, processUpdate, getBotUpdates } from "./bot";
-import { sendMail } from "./mail";
+import { sendMail, verifyMailTransport } from "./mail";
 import session from "express-session";
 import MemoryStoreFactory from "memorystore";
 import cron from "node-cron";
@@ -268,6 +268,9 @@ export async function registerRoutes(
   // === Telegram Bot Integration ===
   const botInstance = await setupBot();
 
+  // Verify SMTP at startup so problems show up early in logs
+  verifyMailTransport().catch(() => {});
+
   // Scheduled Reports logic
   const scheduleReports = async () => {
     const settings = await storage.getBotSettings();
@@ -303,11 +306,6 @@ export async function registerRoutes(
         }
 
         const breaks = await storage.getBreaks({ startDate, endDate: now });
-        if (breaks.length === 0) {
-          console.log("No break data for the report period.");
-          return;
-        }
-
         const users = await storage.getAllUsers();
         const userMap = new Map(users.map(u => [u.id, u.fullName || u.username || `User ${u.id}`]));
 
@@ -322,37 +320,41 @@ export async function registerRoutes(
         }));
 
         const wb = xlsx.utils.book_new();
-        const ws = xlsx.utils.json_to_sheet(data);
+        const ws = xlsx.utils.json_to_sheet(data.length ? data : [{ Note: "No breaks recorded for this period." }]);
         xlsx.utils.book_append_sheet(wb, ws, "Breaks");
         const buf = xlsx.write(wb, { type: "buffer", bookType: "xlsx" });
 
         const filename = `report_${format(startDate, "yyyyMMdd")}_to_${format(now, "yyyyMMdd")}.xlsx`;
+        const summary = `${breaks.length} break record(s) from ${format(startDate, "yyyy-MM-dd")} to ${format(now, "yyyy-MM-dd")}.`;
 
         // Send to Telegram
-        if (settings.reportTelegramIds && botInstance) {
+        if (settings.reportTelegramIds?.length && botInstance) {
           for (const tid of settings.reportTelegramIds) {
             try {
-              await botInstance.sendDocument(tid, buf, { caption: `📊 Scheduled Break Report (${format(startDate, "MMM d")} - ${format(now, "MMM d")})` }, { filename, contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-            } catch (e) {
-              console.error(`Failed to send scheduled report to Telegram user ${tid}:`, e);
+              await botInstance.sendDocument(tid, buf, { caption: `📊 Scheduled Break Report\n${summary}` }, { filename, contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+              console.log(`[report] Telegram report sent to ${tid}`);
+            } catch (e: any) {
+              console.error(`[report] Failed to send scheduled report to Telegram user ${tid}:`, e?.message || e);
             }
           }
         }
 
         // Send to Email
-        if (settings.reportEmails) {
+        if (settings.reportEmails?.length) {
           for (const email of settings.reportEmails) {
             try {
               await sendMail({
                 to: email,
                 subject: `BreakTime Scheduled Report: ${format(startDate, "MMM d")} - ${format(now, "MMM d")}`,
-                text: `Please find attached the scheduled break report for the period ${format(startDate, "yyyy-MM-dd")} to ${format(now, "yyyy-MM-dd")}.`,
+                text: `Please find attached the scheduled break report.\n\n${summary}`,
                 attachments: [{ filename, content: buf }]
               });
-            } catch (e) {
-              console.error(`Failed to send scheduled report to email ${email}:`, e);
+            } catch (e: any) {
+              console.error(`[report] Failed to send scheduled report to email ${email}:`, e?.message || e);
             }
           }
+        } else {
+          console.log("[report] No report emails configured; skipping email send.");
         }
       } catch (error) {
         console.error("Scheduled report error:", error);
